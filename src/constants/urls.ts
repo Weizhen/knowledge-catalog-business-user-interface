@@ -9,6 +9,8 @@ export const URLS = {
     SEARCH : '/search',
     GET_ENTRY: '/get-entry',
     CHECK_ENTRY_ACCESS: '/check-entry-access',
+    CHECK_ENTRY_WRITE_ACCESS: '/check-entry-write-access',
+    UPDATE_ENTRY: '/update-entry',
     GET_ENTRY_BY_FQN: '/get-entry-by-fqn',
     LOOKUP_ENTRY_LINKS: '/lookup-entry-links',
     GET_SAMPLE_DATA: '/get-sample-data',

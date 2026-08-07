@@ -84,3 +84,17 @@ export const REQUIRED_PERMISSIONS = [
   'dataplex.entryTypes.get',
   'dataplex.entryTypes.list',
 ] as const;
+
+/**
+ * Steward write IAM (UpdateEntry). NOT required to enter the app —
+ * only gates Edit UI when VITE_FEATURE_STEWARD_EDIT is enabled.
+ * Either permission is sufficient (backend ORs them).
+ */
+export const STEWARD_WRITE_PERMISSIONS = [
+  'dataplex.entries.update',
+  'dataplex.entryGroups.updateEntries',
+] as const;
+
+/** Frontend feature flag: show Edit chrome when true (still needs per-entry IAM). */
+export const isStewardEditFeatureEnabled = (): boolean =>
+  import.meta.env.VITE_FEATURE_STEWARD_EDIT === 'true';

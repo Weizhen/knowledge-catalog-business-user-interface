@@ -16,7 +16,8 @@ import DataProfile from '../DataProfile/DataProfile'
 import EntryList from '../EntryList/EntryList'
 import type { AppDispatch } from '../../app/store'
 import { getSampleData } from '../../features/sample-data/sampleDataSlice'
-import { popFromHistory, pushToHistory, clearPendingTab, fetchEntry, fetchEntryLinks } from '../../features/entry/entrySlice'
+import { popFromHistory, pushToHistory, clearPendingTab, fetchEntry, fetchEntryLinks, checkEntryWriteAccess, updateEntry } from '../../features/entry/entrySlice'
+import type { UpdateEntryRequest } from '../../features/entry/entrySlice'
 import type { GlossaryItem } from '../Glossaries/GlossaryDataType'
 import { fetchAllDataScans, selectAllScans, selectAllScansStatus } from '../../features/dataScan/dataScanSlice';
 import { useAuth } from '../../auth/AuthProvider'
@@ -34,9 +35,12 @@ import GlossariesLinkedAssets from '../Glossaries/GlossariesLinkedAssets';
 import GlossariesSynonyms from '../Glossaries/GlossariesSynonyms';
 import GlossariesSynonymsSkeleton from '../Glossaries/GlossariesSynonymsSkeleton';
 import ResourcePreview from '../Common/ResourcePreview';
-import TableInsights from '../TableInsights/TableInsights'
-import DatasetInsights from '../TableInsights/DatasetInsights'
+import TableInsights from '../TableInsights/TableInsights';
+import DatasetInsights from '../TableInsights/DatasetInsights';
 import { useNoAccess } from '../../contexts/NoAccessContext';
+import { useNotification } from '../../contexts/NotificationContext';
+import { isStewardEditFeatureEnabled } from '../../constants/auth';
+import { aspectKeyFromAspectTypeName } from '../../constants/stewardEdit';
 // import { useFavorite } from '../../hooks/useFavorite'
 
 /**
@@ -107,7 +111,12 @@ const ViewDetails = () => {
   const pendingTabName = useSelector((state: any) => state.entry.pendingTabName);
   const entryLinks = useSelector((state: any) => state.entry.entryLinks) as GlossaryItem[];
   const entryLinksStatus = useSelector((state: any) => state.entry.entryLinksStatus);
+  const canEditEntry = useSelector((state: any) => state.entry.canEdit) as boolean;
+  const writeAccessStatus = useSelector((state: any) => state.entry.writeAccessStatus) as string;
+  const writeAccessMessage = useSelector((state: any) => state.entry.writeAccessMessage) as string | null;
+  const updateStatus = useSelector((state: any) => state.entry.updateStatus) as 'idle' | 'loading' | 'succeeded' | 'failed';
   const { triggerNoAccess } = useNoAccess();
+  const { showNotification } = useNotification();
   const sampleData = useSelector((state: any) => state.sampleData.items);
   const sampleDataStatus = useSelector((state: any) => state.sampleData.status);
   const glossaryItems = useSelector((state: any) => state.glossaries.viewDetailsItems);
@@ -118,6 +127,8 @@ const ViewDetails = () => {
   const allScans = useSelector(selectAllScans);
   const allScansStatus = useSelector(selectAllScansStatus);
   const initialTabName = (location.state as any)?.tabName as string | undefined;
+  const stewardEditEnabled = isStewardEditFeatureEnabled();
+  const canEdit = stewardEditEnabled && canEditEntry;
   const tabNameApplied = React.useRef(false);
   const fetchedLinksEntryId = React.useRef<string | null>(null);
   const [tabValue, setTabValue] = React.useState(0);
@@ -343,6 +354,61 @@ const ViewDetails = () => {
 
   const headerDescription = displayEntry?.entrySource?.description || '';
 
+  const aspectTypeOptions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const aspectsList = (user as any)?.appConfig?.aspects || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return aspectsList.map((a: any) => {
+      const entryLike = a?.dataplexEntry || a;
+      const name =
+        entryLike?.name?.includes('/aspectTypes/')
+          ? entryLike.name
+          : (entryLike?.name || '')
+              .replace('/entryGroups/@dataplex/entries/', '/aspectTypes/')
+              .replace(/_aspectType$/, '');
+      return {
+        name,
+        displayName:
+          entryLike?.entrySource?.displayName ||
+          aspectKeyFromAspectTypeName(name).split('.').pop() ||
+          name,
+      };
+    }).filter((o: { name: string }) => Boolean(o.name));
+  }, [user]);
+
+  const handleUpdateEntry = useCallback(
+    async (payload: Omit<UpdateEntryRequest, 'id_token'>) => {
+      const result = await dispatch(
+        updateEntry({
+          ...payload,
+          id_token,
+        })
+      );
+      if (updateEntry.rejected.match(result)) {
+        const err = result.payload as any;
+        const message =
+          err?.message ||
+          err?.error ||
+          (typeof err === 'string' ? err : 'Failed to update entry');
+        showNotification(message, 'error', 5000);
+        throw new Error(message);
+      }
+    },
+    [dispatch, id_token, showNotification]
+  );
+
+  useEffect(() => {
+    if (!stewardEditEnabled || !id_token || !entry?.name || entryStatus !== 'succeeded') {
+      return;
+    }
+    dispatch(
+      checkEntryWriteAccess({
+        entryName: entry.name,
+        id_token,
+      })
+    );
+  }, [stewardEditEnabled, id_token, entry?.name, entryStatus, dispatch]);
+
 let annotationTab = (
   <Box sx={{ 
     flex: 1, 
@@ -369,12 +435,27 @@ let annotationTab = (
       isTopComponent={true}
       expandedItems={expandedAnnotations}
       setExpandedItems={setExpandedAnnotations}
-      isGlossary={true} 
+      isGlossary={true}
+      canEdit={canEdit}
+      updateStatus={updateStatus}
+      idToken={id_token}
+      aspectTypeOptions={aspectTypeOptions}
+      onUpdateEntry={handleUpdateEntry}
     />
   </Box>
 );
 
-let overviewTab = <DetailPageOverview entry={displayEntry} css={{width:"100%"}} sampleTableData={sampleTableData} noTopSpacing={true}/>;
+let overviewTab = (
+  <DetailPageOverview
+    entry={displayEntry}
+    css={{width:"100%"}}
+    sampleTableData={sampleTableData}
+    noTopSpacing={true}
+    canEdit={canEdit}
+    updateStatus={updateStatus}
+    onUpdateEntry={handleUpdateEntry}
+  />
+);
   
 //   useEffect(() => {
 //     if(getEntryType(entry.name, '/') == 'Tables') {
@@ -1086,6 +1167,17 @@ const ctaButtons = (
                     {showCta && (
                       <div style={{ position: "absolute", top: "24px", right: "24px", display: "flex", alignItems: "center", gap: "8px" }}>
                         {ctaButtons}
+                      </div>
+                    )}
+
+                    {stewardEditEnabled && writeAccessStatus === 'succeeded' && !canEditEntry && (
+                      <div style={{
+                        fontFamily: '"Google Sans", sans-serif',
+                        fontSize: '12px',
+                        color: '#5F6368',
+                        marginTop: '4px',
+                      }}>
+                        {writeAccessMessage || "You don't have permission to edit this entry."}
                       </div>
                     )}
 

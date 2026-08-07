@@ -15,6 +15,24 @@ vi.mock('../../assets/svg/database_schema_icon.svg', () => ({
   default: 'database-schema-icon'
 }));
 
+vi.mock('../../contexts/NotificationContext', () => ({
+  useNotification: () => ({
+    showNotification: vi.fn(),
+    showSuccess: vi.fn(),
+    showError: vi.fn(),
+    showWarning: vi.fn(),
+    showInfo: vi.fn(),
+    clearNotification: vi.fn(),
+    clearAllNotifications: vi.fn(),
+  }),
+}));
+
+vi.mock('./AspectEditDialog', () => ({
+  default: function MockAspectEditDialog({ open }: { open: boolean }) {
+    return open ? <div data-testid="aspect-edit-dialog">Aspect Edit Dialog</div> : null;
+  },
+}));
+
 describe('PreviewAnnotation', () => {
   // --- MOCK DATA ---
   const mockEntry = {
@@ -713,6 +731,34 @@ describe('PreviewAnnotation', () => {
 
       expect(screen.getByText('Direct')).toBeInTheDocument();
       expect(screen.getByText('directKey')).toBeInTheDocument();
+    });
+  });
+
+  describe('Steward edit gating', () => {
+    it('does not show Add aspect when canEdit is false', () => {
+      renderPreviewAnnotation({ canEdit: false });
+      expect(screen.queryByText('Add aspect')).not.toBeInTheDocument();
+    });
+
+    it('shows Add aspect and edit/remove controls when canEdit is true', () => {
+      renderPreviewAnnotation({
+        canEdit: true,
+        onUpdateEntry: vi.fn(),
+        idToken: 'token',
+      });
+      expect(screen.getByText('Add aspect')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Edit Annotation1/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Remove Annotation1/i)).toBeInTheDocument();
+    });
+
+    it('opens aspect edit dialog when Add aspect is clicked', () => {
+      renderPreviewAnnotation({
+        canEdit: true,
+        onUpdateEntry: vi.fn(),
+        idToken: 'token',
+      });
+      fireEvent.click(screen.getByText('Add aspect'));
+      expect(screen.getByTestId('aspect-edit-dialog')).toBeInTheDocument();
     });
   });
 });

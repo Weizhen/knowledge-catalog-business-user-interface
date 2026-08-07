@@ -8,6 +8,10 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_CLIENT_ID: string;
   readonly VITE_GOOGLE_REDIRECT_URI: string;
   readonly VITE_FEATURE_DARK_MODE: string;
+  readonly VITE_FEATURE_STEWARD_EDIT: string;
+  readonly VITE_FEATURE_API_TIMING: string;
+  readonly VITE_IS_SERVICE_ACCOUNT: string;
+  readonly VITE_SUPPORT_EMAIL: string;
 }
 
 interface ImportMeta {

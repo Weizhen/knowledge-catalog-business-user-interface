@@ -4,9 +4,13 @@ import {
   Grid,
   Tooltip,
   Box,
-  Divider
+  Divider,
+  Button,
+  TextField,
+  CircularProgress,
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useSelector } from 'react-redux';
 import Schema from '../Schema/Schema';
 import SchemaFilter from '../Schema/SchemaFilter';
@@ -22,6 +26,13 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { normalizeSystemName, getName, extractProjectNumberFromEntryName, resolveProjectDisplayName } from '../../utils/resourceUtils';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
+import {
+  getPlainAspectData,
+  isOverviewAspectKey,
+  OVERVIEW_ASPECT_KEY,
+  OVERVIEW_ASPECT_TYPE,
+} from '../../constants/stewardEdit';
+import type { UpdateEntryRequest } from '../../features/entry/entrySlice';
 
 /**
  * @file DetailPageOverview.tsx
@@ -160,6 +171,9 @@ interface DetailPageOverviewProps {
   css: React.CSSProperties; // Optional CSS properties for the button
   accessDenied?: boolean; // True when user doesn't have permission to view this resource
   noTopSpacing?: boolean; // When true, removes top padding/margins (used by ViewDetails which has its own top spacing)
+  canEdit?: boolean;
+  updateStatus?: 'idle' | 'loading' | 'succeeded' | 'failed';
+  onUpdateEntry?: (payload: Omit<UpdateEntryRequest, 'id_token'>) => Promise<void> | void;
 }
 
 const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ onMouseEnter?: React.MouseEventHandler<HTMLElement>; onMouseLeave?: React.MouseEventHandler<HTMLElement> }> }> = ({ text, children }) => {
@@ -179,7 +193,16 @@ const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ o
 };
 
 // FilterDropdown component
-const DetailPageOverview: React.FC<DetailPageOverviewProps> = ({ entry, sampleTableData, css, accessDenied, noTopSpacing = false }) => {
+const DetailPageOverview: React.FC<DetailPageOverviewProps> = ({
+  entry,
+  sampleTableData,
+  css,
+  accessDenied,
+  noTopSpacing = false,
+  canEdit = false,
+  updateStatus = 'idle',
+  onUpdateEntry,
+}) => {
 
 //   const aspects = entry.aspects;
 //   const number = entry.entryType.split('/')[1];
@@ -188,6 +211,10 @@ const DetailPageOverview: React.FC<DetailPageOverviewProps> = ({ entry, sampleTa
   const [filteredSchemaEntry, setFilteredSchemaEntry] = useState<any>(null);
   const [sampleFilterText, setSampleFilterText] = useState('');
   const [sampleActiveFilters, setSampleActiveFilters] = useState<ActiveFilter[]>([]);
+  const [editingOverview, setEditingOverview] = useState(false);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editDocumentation, setEditDocumentation] = useState('');
   const { showNotification } = useNotification();
 
   const resolveValue = useCallback((val: any): string => {
@@ -197,6 +224,68 @@ const DetailPageOverview: React.FC<DetailPageOverviewProps> = ({ entry, sampleTa
     return String(val);
   }, []);
 
+  const findOverviewAspectKey = useCallback(() => {
+    const keys = Object.keys(entry?.aspects || {});
+    return keys.find((k) => isOverviewAspectKey(k)) || OVERVIEW_ASPECT_KEY;
+  }, [entry?.aspects]);
+
+  const startOverviewEdit = () => {
+    const overviewKey = findOverviewAspectKey();
+    const overviewAspect = entry?.aspects?.[overviewKey];
+    const plain = overviewAspect ? getPlainAspectData(overviewAspect) : {};
+    const content =
+      (typeof plain.content === 'string' && plain.content) ||
+      entry?.aspects?.[`${entry?.entryType?.split('/')[1] || ''}.global.overview`]?.data?.fields?.content?.stringValue ||
+      '';
+    setEditDisplayName(entry?.entrySource?.displayName || '');
+    setEditDescription(entry?.entrySource?.description || '');
+    setEditDocumentation(content === 'No Documentation Available' ? '' : content);
+    setEditingOverview(true);
+  };
+
+  const cancelOverviewEdit = () => {
+    setEditingOverview(false);
+  };
+
+  const saveOverviewEdit = async () => {
+    if (!onUpdateEntry || !entry?.name) return;
+    const overviewKey = findOverviewAspectKey();
+    const existing = entry?.aspects?.[overviewKey];
+    const existingPlain = existing ? getPlainAspectData(existing) : {};
+    const updateMask = [
+      'entrySource.displayName',
+      'entrySource.description',
+      'aspects',
+    ];
+    try {
+      await onUpdateEntry({
+        entryName: entry.name,
+        entrySource: {
+          displayName: editDisplayName,
+          description: editDescription,
+        },
+        aspects: {
+          [overviewKey]: {
+            aspectType: existing?.aspectType || OVERVIEW_ASPECT_TYPE,
+            data: {
+              ...existingPlain,
+              content: editDocumentation,
+              contentType: existingPlain.contentType || 'MARKDOWN',
+            },
+          },
+        },
+        aspectKeys: [overviewKey],
+        updateMask,
+        deleteMissingAspects: false,
+      });
+      setEditingOverview(false);
+      showNotification('Entry overview saved.', 'success', 3000);
+    } catch {
+      // Parent surfaces error via notification / updateError
+    }
+  };
+
+  const saving = updateStatus === 'loading';
   const getSamplePropertyValues = useCallback((property: string): string[] => {
     if (!Array.isArray(sampleTableData) || sampleTableData.length === 0) return [];
     const values = new Set<string>();
@@ -728,9 +817,19 @@ const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(ent
                             <path d="M10.9757 3.33366L15.0007 7.35866V16.667H5.00065V3.33366H10.9757ZM11.6673 1.66699H5.00065C4.08398 1.66699 3.33398 2.41699 3.33398 3.33366V16.667C3.33398 17.5837 4.08398 18.3337 5.00065 18.3337H15.0007C15.9173 18.3337 16.6673 17.5837 16.6673 16.667V6.66699L11.6673 1.66699ZM10.0007 11.667C10.9173 11.667 11.6673 10.917 11.6673 10.0003C11.6673 9.08366 10.9173 8.33366 10.0007 8.33366C9.08398 8.33366 8.33398 9.08366 8.33398 10.0003C8.33398 10.917 9.08398 11.667 10.0007 11.667ZM13.334 14.5253C13.334 13.8503 12.934 13.2503 12.3173 12.9837C11.609 12.6753 10.8257 12.5003 10.0007 12.5003C9.17565 12.5003 8.39232 12.6753 7.68398 12.9837C7.06732 13.2503 6.66732 13.8503 6.66732 14.5253V15.0003H13.334V14.5253Z" fill="#022FCD"/>
                             </svg>
                         </Box>
-                        <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600, fontSize: "18px", color: "#3D4151" }}>
+                        <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600, fontSize: "18px", color: "#3D4151", flex: 1 }}>
                             Documentation
                         </Typography>
+                        {canEdit && !editingOverview && (
+                          <Button
+                            size="small"
+                            startIcon={<EditOutlinedIcon />}
+                            onClick={startOverviewEdit}
+                            sx={{ textTransform: 'none', fontFamily: '"Google Sans", sans-serif' }}
+                          >
+                            Edit overview
+                          </Button>
+                        )}
                     </Box>
                     <Divider sx={{ width: "100%", borderColor: "#E8EBEF", margin: "-4px 0 0 0" }} />
                     {/* Content */}
@@ -741,7 +840,48 @@ const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(ent
                         '&::-webkit-scrollbar-thumb': { backgroundColor: '#a1a1a1ff', borderRadius: '10px' },
                         '&::-webkit-scrollbar-thumb:hover': { background: '#7c7c7d' },
                     }}>
-                        {documentation === 'No Documentation Available' ? (
+                        {editingOverview ? (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+                            <TextField
+                              label="Display name"
+                              value={editDisplayName}
+                              onChange={(e) => setEditDisplayName(e.target.value)}
+                              fullWidth
+                              size="small"
+                              disabled={saving}
+                            />
+                            <TextField
+                              label="Description"
+                              value={editDescription}
+                              onChange={(e) => setEditDescription(e.target.value)}
+                              fullWidth
+                              size="small"
+                              multiline
+                              minRows={2}
+                              disabled={saving}
+                            />
+                            <TextField
+                              label="Documentation (overview)"
+                              value={editDocumentation}
+                              onChange={(e) => setEditDocumentation(e.target.value)}
+                              fullWidth
+                              multiline
+                              minRows={8}
+                              disabled={saving}
+                            />
+                            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                              <Button onClick={cancelOverviewEdit} disabled={saving}>Cancel</Button>
+                              <Button
+                                variant="contained"
+                                onClick={saveOverviewEdit}
+                                disabled={saving}
+                                startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
+                              >
+                                Save
+                              </Button>
+                            </Box>
+                          </Box>
+                        ) : documentation === 'No Documentation Available' ? (
                             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '200px', gap: '8px', padding: '40px 20px', boxSizing: 'border-box' }}>
                                 <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600, fontSize: '16px', color: '#1F1F1F', textAlign: 'center' }}>
                                     No documentation yet

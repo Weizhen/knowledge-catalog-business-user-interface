@@ -196,10 +196,45 @@ function checkErrorAndSendResponse(res, error, customMessage) {
     else if (error.code === 400 || (error.errors && error.errors[0] && error.errors[0].reason === 'badRequest')) {
       return res.status(400).json({ error: 'Bad Request: The request was invalid or cannot be served.', details: error.message });
     }
+    else if (error?.code === 409 || ((error.message || '').toLowerCase().includes('aborted')) || ((error.message || '').toLowerCase().includes('failed_precondition'))) {
+      return res.status(409).json({
+        error: 'Conflict: The entry may have changed. Refresh and try again.',
+        details: error.message
+      });
+    }
     else{
       return res.status(500).json({ error: 'An internal server error occurred.', details: error.message });
     }
 }
+
+/** Kill-switch for steward write endpoints (UpdateEntry). Default off for safe rollout. */
+function areEntryWritesEnabled() {
+  return process.env.ENABLE_ENTRY_WRITES === 'true';
+}
+
+/**
+ * Parse a Dataplex entry resource name into project / location / entryGroup / entryId.
+ * Format: projects/{project}/locations/{location}/entryGroups/{entryGroup}/entries/{entryId}
+ */
+function parseEntryName(entryName) {
+  if (!entryName || typeof entryName !== 'string') return null;
+  const parts = entryName.split('/');
+  if (parts.length < 8 || parts[0] !== 'projects' || parts[2] !== 'locations' || parts[4] !== 'entryGroups' || parts[6] !== 'entries') {
+    return null;
+  }
+  return {
+    projectId: parts[1],
+    location: parts[3],
+    entryGroupId: parts[5],
+    entryId: parts.slice(7).join('/'),
+    entryGroupName: parts.slice(0, 6).join('/'),
+  };
+}
+
+const STEWARD_WRITE_IAM_PERMISSIONS = [
+  'dataplex.entries.update',
+  'dataplex.entryGroups.updateEntries',
+];
 
 
 /**
@@ -601,6 +636,196 @@ app.get('/api/v1/check-entry-access', async (req, res) => {
   } catch (error) {
     console.error('Error checking entry access', error);
     return checkErrorAndSendResponse(res, error, 'An error occurred while checking entry access.');
+  }
+});
+
+/**
+ * POST /api/v1/check-entry-write-access
+ * Checks whether the caller can update the given entry (steward gate).
+ * Does not block app login — only informs the UI whether Edit controls should show.
+ *
+ * Body: { entryName: string }
+ * Response: { canEdit: boolean, permissions: string[], grantedPermissions: string[], writesEnabled: boolean }
+ */
+app.post('/api/v1/check-entry-write-access', async (req, res) => {
+  const writesEnabled = areEntryWritesEnabled();
+  if (!writesEnabled) {
+    return res.json({
+      canEdit: false,
+      permissions: STEWARD_WRITE_IAM_PERMISSIONS,
+      grantedPermissions: [],
+      writesEnabled: false,
+      message: 'Entry writes are disabled on this server (ENABLE_ENTRY_WRITES is not true).',
+    });
+  }
+
+  const { entryName } = req.body || {};
+  if (!entryName || typeof entryName !== 'string') {
+    return res.status(400).json({ error: 'entryName is required and must be a non-empty string.' });
+  }
+
+  const parsed = parseEntryName(entryName);
+  if (!parsed) {
+    return res.status(400).json({
+      error: 'Invalid entryName. Expected projects/{project}/locations/{location}/entryGroups/{group}/entries/{id}.',
+    });
+  }
+
+  const accessToken = req.headers.authorization?.split(' ')[1];
+  const permissions = STEWARD_WRITE_IAM_PERMISSIONS;
+
+  try {
+    const oauth2Client = getAuthClient(accessToken);
+    const cloudResourceManager = google.cloudresourcemanager({
+      version: 'v1',
+      auth: oauth2Client,
+    });
+
+    // Prefer the entry's project; fall back to server project for system/@bigquery groups.
+    const projectId = parsed.projectId || process.env.GOOGLE_CLOUD_PROJECT_ID;
+    const response = await cloudResourceManager.projects.testIamPermissions({
+      resource: projectId,
+      requestBody: { permissions },
+    });
+
+    const grantedPermissions = response.data.permissions || [];
+    // Either entries.update OR entryGroups.updateEntries is sufficient.
+    const canEdit = permissions.some((p) => grantedPermissions.includes(p));
+
+    return res.json({
+      canEdit,
+      permissions,
+      grantedPermissions,
+      writesEnabled: true,
+      projectId,
+      message: canEdit
+        ? `User can update entries on project ${projectId}.`
+        : `User lacks steward write permissions on project ${projectId}.`,
+    });
+  } catch (error) {
+    console.error('Error checking entry write access:', error.message);
+    if (error.code === 403 || (error.errors && error.errors[0] && error.errors[0].reason === 'FORBIDDEN')) {
+      return res.json({
+        canEdit: false,
+        permissions,
+        grantedPermissions: [],
+        writesEnabled: true,
+        message: 'Unable to test write permissions for this project.',
+      });
+    }
+    return checkErrorAndSendResponse(res, error, 'An error occurred while checking entry write access:');
+  }
+});
+
+/**
+ * POST /api/v1/update-entry
+ * Steward UpdateEntry for overview/description and aspects.
+ *
+ * Body:
+ * {
+ *   entryName: string,
+ *   entrySource?: { displayName?: string, description?: string },
+ *   aspects?: { [aspectKey]: { aspectType?: string, data: object } },
+ *   aspectKeys?: string[],
+ *   updateMask: string[],
+ *   deleteMissingAspects?: boolean
+ * }
+ */
+app.post('/api/v1/update-entry', async (req, res) => {
+  if (!areEntryWritesEnabled()) {
+    return res.status(403).json({
+      error: 'Entry writes are disabled',
+      message: 'Set ENABLE_ENTRY_WRITES=true to enable UpdateEntry endpoints.',
+    });
+  }
+
+  const {
+    entryName,
+    entrySource,
+    aspects,
+    aspectKeys,
+    updateMask,
+    deleteMissingAspects = false,
+  } = req.body || {};
+
+  if (!entryName || typeof entryName !== 'string') {
+    return res.status(400).json({ error: 'entryName is required and must be a non-empty string.' });
+  }
+  if (!Array.isArray(updateMask) || updateMask.length === 0) {
+    return res.status(400).json({ error: 'updateMask is required and must be a non-empty array of field paths.' });
+  }
+
+  const touchesAspects = updateMask.includes('aspects') || (aspects && Object.keys(aspects).length > 0);
+  if (touchesAspects && (!Array.isArray(aspectKeys) || aspectKeys.length === 0)) {
+    return res.status(400).json({
+      error: 'aspectKeys is required when updating aspects (prevents accidental overwrite of unrelated aspects).',
+    });
+  }
+
+  const parsed = parseEntryName(entryName);
+  if (!parsed) {
+    return res.status(400).json({
+      error: 'Invalid entryName. Expected projects/{project}/locations/{location}/entryGroups/{group}/entries/{id}.',
+    });
+  }
+
+  const accessToken = req.headers.authorization?.split(' ')[1];
+  const actorEmail = req.user?.email || req.auth?.email || 'unknown';
+
+  try {
+    const oauth2Client = getAuthClient(accessToken);
+    const dataplexClientv1 = new CatalogServiceClient({
+      auth: oauth2Client,
+    });
+
+    const entryPayload = { name: entryName };
+
+    if (entrySource && typeof entrySource === 'object') {
+      entryPayload.entrySource = {};
+      if (typeof entrySource.displayName === 'string') {
+        entryPayload.entrySource.displayName = entrySource.displayName;
+      }
+      if (typeof entrySource.description === 'string') {
+        entryPayload.entrySource.description = entrySource.description;
+      }
+    }
+
+    if (aspects && typeof aspects === 'object') {
+      entryPayload.aspects = aspects;
+    }
+
+    const request = {
+      entry: entryPayload,
+      updateMask: { paths: updateMask },
+      deleteMissingAspects: Boolean(deleteMissingAspects),
+    };
+
+    if (Array.isArray(aspectKeys) && aspectKeys.length > 0) {
+      request.aspectKeys = aspectKeys;
+    }
+
+    console.log(
+      `[update-entry] actor=${actorEmail} entry=${entryName} mask=${updateMask.join(',')} aspectKeys=${(aspectKeys || []).join(',') || '-'} deleteMissing=${Boolean(deleteMissingAspects)}`
+    );
+
+    const [updated] = await dataplexClientv1.updateEntry(request);
+
+    // Re-fetch FULL view so the UI gets the same shape as get-entry.
+    const [fullEntry] = await dataplexClientv1.getEntry({
+      name: entryName,
+      view: protos.google.cloud.dataplex.v1.EntryView.ALL,
+    });
+
+    return res.json(fullEntry || updated);
+  } catch (error) {
+    console.error(`[update-entry] actor=${actorEmail} failed:`, error.message);
+    if (error?.code === 403 || ((error.message || '').toLowerCase().includes('permission_denied'))) {
+      return res.status(403).json({
+        error: 'Permission Denied: You do not have steward permission to update this entry.',
+        details: error.message,
+      });
+    }
+    return checkErrorAndSendResponse(res, error, 'An error occurred while updating the Knowledge Catalog entry.');
   }
 });
 

@@ -51,6 +51,11 @@ vi.mock('../../features/entry/entrySlice', async (importOriginal) => {
     pushToHistory: vi.fn(() => ({ type: 'entry/pushToHistory' })),
     fetchEntry: vi.fn(() => ({ type: 'entry/fetchEntry' })),
     fetchEntryLinks: vi.fn(() => ({ type: 'entry/fetchEntryLinks' })),
+    checkEntryWriteAccess: vi.fn(() => ({ type: 'entry/checkEntryWriteAccess' })),
+    updateEntry: Object.assign(
+      vi.fn(() => ({ type: 'entry/updateEntry' })),
+      { rejected: { match: () => false }, fulfilled: { match: () => true } }
+    ),
   };
 });
 
@@ -393,7 +398,18 @@ describe('ViewDetails', () => {
   const createMockStore = (entryState: any = mockEntry, entryStatus = 'succeeded', sampleDataState = mockSampleData, sampleDataStatus = 'succeeded', history: any[] = [], entryLinks: any[] = [], entryLinksStatus = 'idle') => {
     return configureStore({
       reducer: {
-        entry: (state = { items: entryState, status: entryStatus, history, entryLinks, entryLinksStatus }) => state,
+        entry: (state = {
+          items: entryState,
+          status: entryStatus,
+          history,
+          entryLinks,
+          entryLinksStatus,
+          canEdit: false,
+          writeAccessStatus: 'idle',
+          writeAccessMessage: null,
+          updateStatus: 'idle',
+          updateError: null,
+        }) => state,
         sampleData: (state = { items: sampleDataState, status: sampleDataStatus }) => state,
         glossaries: (state = { viewDetailsItems: [] }) => state,
         resources: (state = { items: [] }) => state,

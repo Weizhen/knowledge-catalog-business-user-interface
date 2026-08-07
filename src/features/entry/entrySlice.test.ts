@@ -5,6 +5,8 @@ import entryReducer, {
   fetchEntry,
   fetchLineageEntry,
   fetchEntryLinks,
+  checkEntryWriteAccess,
+  updateEntry,
   setEntry,
   pushToHistory,
   popFromHistory,
@@ -19,6 +21,7 @@ import entryReducer, {
 vi.mock("axios", () => ({
   default: {
     get: vi.fn(),
+    post: vi.fn(),
     defaults: {
       headers: {
         common: {},
@@ -26,8 +29,8 @@ vi.mock("axios", () => ({
     },
   },
   AxiosError: class AxiosError extends Error {
-    response?: { data: unknown };
-    constructor(message: string, response?: { data: unknown }) {
+    response?: { data: unknown; status?: number };
+    constructor(message: string, response?: { data: unknown; status?: number }) {
       super(message);
       this.name = "AxiosError";
       this.response = response;
@@ -108,6 +111,11 @@ const getInitialState = () => ({
   entryLinks: [] as import('../../component/Glossaries/GlossaryDataType').GlossaryItem[],
   entryLinksStatus: "idle" as const,
   entryLinksError: null,
+  canEdit: false,
+  writeAccessStatus: "idle" as const,
+  writeAccessMessage: null as string | null,
+  updateStatus: "idle" as const,
+  updateError: null,
 });
 
 // ==========================================================================
@@ -139,6 +147,9 @@ describe("entrySlice", () => {
       expect(state.entryLinks).toEqual([]);
       expect(state.entryLinksStatus).toBe("idle");
       expect(state.entryLinksError).toBeNull();
+      expect(state.canEdit).toBe(false);
+      expect(state.writeAccessStatus).toBe("idle");
+      expect(state.updateStatus).toBe("idle");
     });
 
     it("has correct slice name", () => {
@@ -1288,6 +1299,86 @@ describe("entrySlice", () => {
     it("exports fetchEntryLinks async thunk", () => {
       expect(fetchEntryLinks).toBeDefined();
       expect(typeof fetchEntryLinks).toBe("function");
+    });
+
+    it("exports checkEntryWriteAccess async thunk", () => {
+      expect(checkEntryWriteAccess).toBeDefined();
+      expect(typeof checkEntryWriteAccess).toBe("function");
+    });
+
+    it("exports updateEntry async thunk", () => {
+      expect(updateEntry).toBeDefined();
+      expect(typeof updateEntry).toBe("function");
+    });
+  });
+
+  describe("checkEntryWriteAccess", () => {
+    it("sets canEdit true when backend grants write access", async () => {
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { canEdit: true, writesEnabled: true, message: "ok" },
+      });
+      const store = createTestStore();
+      await store.dispatch(
+        checkEntryWriteAccess({
+          entryName: mockEntryData.name,
+          id_token: "token",
+        })
+      );
+      const state = store.getState().entry;
+      expect(state.canEdit).toBe(true);
+      expect(state.writeAccessStatus).toBe("succeeded");
+    });
+
+    it("sets canEdit false when backend denies write access", async () => {
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: { canEdit: false, writesEnabled: true, message: "missing perms" },
+      });
+      const store = createTestStore();
+      await store.dispatch(
+        checkEntryWriteAccess({
+          entryName: mockEntryData.name,
+          id_token: "token",
+        })
+      );
+      expect(store.getState().entry.canEdit).toBe(false);
+    });
+  });
+
+  describe("updateEntry", () => {
+    it("replaces items with updated entry on success", async () => {
+      const updated = { ...mockEntryData, entrySource: { ...mockEntryData.entrySource, description: "Updated" } };
+      vi.mocked(axios.post).mockResolvedValueOnce({ data: updated });
+      const store = createTestStore({ items: mockEntryData, status: "succeeded" });
+      await store.dispatch(
+        updateEntry({
+          id_token: "token",
+          entryName: mockEntryData.name,
+          entrySource: { description: "Updated" },
+          updateMask: ["entrySource.description"],
+        })
+      );
+      expect(store.getState().entry.updateStatus).toBe("succeeded");
+      expect(store.getState().entry.items).toEqual(updated);
+    });
+
+    it("maps 403 to PERMISSION_DENIED", async () => {
+      const err = new AxiosError("forbidden", {
+        status: 403,
+        data: { error: "Permission Denied" },
+      });
+      vi.mocked(axios.post).mockRejectedValueOnce(err);
+      const store = createTestStore();
+      const result = await store.dispatch(
+        updateEntry({
+          id_token: "token",
+          entryName: mockEntryData.name,
+          updateMask: ["aspects"],
+          aspectKeys: ["x"],
+          aspects: {},
+        })
+      );
+      expect(updateEntry.rejected.match(result)).toBe(true);
+      expect(store.getState().entry.updateStatus).toBe("failed");
     });
   });
 });

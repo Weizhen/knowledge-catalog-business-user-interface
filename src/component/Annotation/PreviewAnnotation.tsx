@@ -4,10 +4,25 @@ import {
   AccordionSummary,
   AccordionDetails,
   Typography,
+  Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Box,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import AddIcon from '@mui/icons-material/Add';
 import { getAspectL1Icon } from '../../constants/aspectIcons';
 import FieldItem from './FieldItem';
+import AspectEditDialog from './AspectEditDialog';
+import { isSystemAspectKey } from '../../constants/stewardEdit';
+import type { UpdateEntryRequest } from '../../features/entry/entrySlice';
+import { useNotification } from '../../contexts/NotificationContext';
 
 /**
  * @file PreviewAnnotation.tsx
@@ -122,6 +137,11 @@ interface PreviewAnnotationProps {
   setExpandedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
   isGlossary?: boolean;
   isDataProduct?: boolean;
+  canEdit?: boolean;
+  updateStatus?: 'idle' | 'loading' | 'succeeded' | 'failed';
+  idToken?: string;
+  aspectTypeOptions?: { name: string; displayName: string }[];
+  onUpdateEntry?: (payload: Omit<UpdateEntryRequest, 'id_token'>) => Promise<void> | void;
 }
 
 const isValidField = (item: any): boolean => {
@@ -145,7 +165,17 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
   setExpandedItems,
   isGlossary = false,
   isDataProduct = false,
+  canEdit = false,
+  updateStatus = 'idle',
+  idToken = '',
+  aspectTypeOptions = [],
+  onUpdateEntry,
 }) => {
+  const { showNotification } = useNotification();
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editMode, setEditMode] = useState<'edit' | 'add'>('edit');
+  const [editingAspectKey, setEditingAspectKey] = useState<string | undefined>();
+  const [removeKey, setRemoveKey] = useState<string | null>(null);
 
   const number = entry?.entryType?.split('/').length > 0 ? entry?.entryType.split('/')[1] : '0';
 
@@ -191,6 +221,62 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
   // State to track sub-field expansion (L2/L3)
   const [expandedFieldPaths, setExpandedFieldPaths] = useState<Set<string>>(new Set());
 
+  const saving = updateStatus === 'loading';
+
+  const openEditAspect = (key: string) => {
+    setEditMode('edit');
+    setEditingAspectKey(key);
+    setEditDialogOpen(true);
+  };
+
+  const openAddAspect = () => {
+    setEditMode('add');
+    setEditingAspectKey(undefined);
+    setEditDialogOpen(true);
+  };
+
+  const handleAspectSave = async (payload: {
+    aspectKey: string;
+    aspectType: string;
+    data: Record<string, unknown>;
+  }) => {
+    if (!onUpdateEntry || !entry?.name) return;
+    try {
+      await onUpdateEntry({
+        entryName: entry.name,
+        aspects: {
+          [payload.aspectKey]: {
+            aspectType: payload.aspectType,
+            data: payload.data,
+          },
+        },
+        aspectKeys: [payload.aspectKey],
+        updateMask: ['aspects'],
+        deleteMissingAspects: false,
+      });
+      setEditDialogOpen(false);
+      showNotification(editMode === 'add' ? 'Aspect added.' : 'Aspect updated.', 'success', 3000);
+    } catch {
+      // Parent shows error
+    }
+  };
+
+  const confirmRemoveAspect = async () => {
+    if (!onUpdateEntry || !entry?.name || !removeKey) return;
+    try {
+      await onUpdateEntry({
+        entryName: entry.name,
+        aspects: {},
+        aspectKeys: [removeKey],
+        updateMask: ['aspects'],
+        deleteMissingAspects: true,
+      });
+      setRemoveKey(null);
+      showNotification('Aspect removed.', 'success', 3000);
+    } catch {
+      // Parent shows error
+    }
+  };
   // When all aspects are expanded (expand all), also expand all nested fields
   // When all aspects are collapsed, reset sub-field expansion
   useEffect(() => {
@@ -356,15 +442,44 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
         color: '#0C1226CC',
         fontSize: '1rem',
         fontFamily: 'Google Sans, sans-serif',
+        gap: 12,
         ...css
       }}>
         No aspects available for this resource
+        {canEdit && (
+          <Button startIcon={<AddIcon />} variant="outlined" onClick={openAddAspect} size="small">
+            Add aspect
+          </Button>
+        )}
+        <AspectEditDialog
+          open={editDialogOpen}
+          mode={editMode}
+          entry={entry}
+          aspectKey={editingAspectKey}
+          idToken={idToken}
+          aspectTypeOptions={aspectTypeOptions}
+          onClose={() => setEditDialogOpen(false)}
+          onSave={handleAspectSave}
+          saving={saving}
+        />
       </div>
     );
   }
 
   return (
     <>
+      {canEdit && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1, pt: 1 }}>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={openAddAspect}
+            sx={{ textTransform: 'none', fontFamily: '"Google Sans", sans-serif' }}
+          >
+            Add aspect
+          </Button>
+        </Box>
+      )}
       <div style={{ fontSize: "0.75rem", display: "flex", flexDirection: "column", flex: "1 1 auto", overflow: "hidden", borderRadius: '12px', ...css }}>
         {keys.map((key) => {
           const isSchema = key === `${number}.global.schema`;
@@ -380,6 +495,7 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
           const isFirstAspect = key === displayableKeys[0];
           const isLastAspect = key === displayableKeys[displayableKeys.length - 1];
           const isSingleItem = displayableKeys.length === 1;
+          const editableAspect = canEdit && !isSystemAspectKey(key);
 
           const rawData = aspects[key].data;
 
@@ -397,6 +513,27 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
           const rawAspectName = aspects[key].aspectType.split('/').pop();
           const aspectName = ASPECT_DISPLAY_NAMES[rawAspectName] ?? rawAspectName.replace(/[-_]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
           const aspectIcon = getAspectL1Icon(rawAspectName);
+
+          const stewardActions = editableAspect ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 1 }}>
+              <IconButton
+                size="small"
+                aria-label={`Edit ${aspectName}`}
+                onClick={() => openEditAspect(key)}
+                disabled={saving}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                aria-label={`Remove ${aspectName}`}
+                onClick={() => setRemoveKey(key)}
+                disabled={saving}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          ) : null;
 
           const headerContent = (
             <div style={{
@@ -457,39 +594,52 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                   }),
                 }}
               >
-                <AccordionSummary
-                  aria-controls={key + "-content"}
-                  id={key + "-header"}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    minHeight: '48px',
-                    padding: '12px 8px',
-                    backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : (expandedItems.has(key) ? '#F0F4F8' : 'transparent'),
-                    flexDirection: 'row',
-                    '&:hover': { backgroundColor: (isDataProduct || isGlossary) ? (expandedItems.has(key) ? '#FFFFFF' : 'transparent') : '#F0F4F8' },
-                    '& .MuiAccordionSummary-content': { margin: 0, overflow: 'hidden', minWidth: 0 },
-                    '& .MuiAccordionSummary-expandIconWrapper': { display: 'none' },
-                    ...(isFirstAspect && {
-                      borderTopLeftRadius: '12px',
-                      borderTopRightRadius: '12px',
-                    }),
-                    ...(isLastAspect && !expandedItems.has(key) && {
-                      borderBottomLeftRadius: '12px',
-                      borderBottomRightRadius: '12px',
-                    }),
-                  }}
-                >
-                  <ExpandMoreIcon sx={{
-                    fontSize: '24px',
-                    color: '#575757',
-                    transform: expandedItems.has(key) ? 'rotate(0deg)' : 'rotate(-90deg)',
-                    transition: 'transform 0.2s',
-                    flexShrink: 0,
-                    marginRight: '4px',
-                  }} />
-                  {headerContent}
-                </AccordionSummary>
+                <Box sx={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
+                  <AccordionSummary
+                    aria-controls={key + "-content"}
+                    id={key + "-header"}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      minHeight: '48px',
+                      padding: '12px 8px',
+                      flex: 1,
+                      backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : (expandedItems.has(key) ? '#F0F4F8' : 'transparent'),
+                      flexDirection: 'row',
+                      '&:hover': { backgroundColor: (isDataProduct || isGlossary) ? (expandedItems.has(key) ? '#FFFFFF' : 'transparent') : '#F0F4F8' },
+                      '& .MuiAccordionSummary-content': { margin: 0, overflow: 'hidden', minWidth: 0 },
+                      '& .MuiAccordionSummary-expandIconWrapper': { display: 'none' },
+                      ...(isFirstAspect && {
+                        borderTopLeftRadius: '12px',
+                      }),
+                      ...(isLastAspect && !expandedItems.has(key) && {
+                        borderBottomLeftRadius: '12px',
+                      }),
+                    }}
+                  >
+                    <ExpandMoreIcon sx={{
+                      fontSize: '24px',
+                      color: '#575757',
+                      transform: expandedItems.has(key) ? 'rotate(0deg)' : 'rotate(-90deg)',
+                      transition: 'transform 0.2s',
+                      flexShrink: 0,
+                      marginRight: '4px',
+                    }} />
+                    {headerContent}
+                  </AccordionSummary>
+                  {stewardActions && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        pr: 1,
+                        backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : (expandedItems.has(key) ? '#F0F4F8' : 'transparent'),
+                      }}
+                    >
+                      {stewardActions}
+                    </Box>
+                  )}
+                </Box>
                 <AccordionDetails sx={{
                   padding: 0,
                   backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : (expandedItems.has(key) ? '#F0F4F8' : 'transparent'),
@@ -533,12 +683,67 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                   flexShrink: 0,
                   marginRight: '4px',
                 }} />
-                {headerContent}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                }}>
+                  <img
+                    src={aspectIcon}
+                    alt=""
+                    style={{ width: '20px', height: '20px', flexShrink: 0 }}
+                  />
+                  <Typography component="span" sx={{
+                    fontFamily: 'Google Sans, sans-serif',
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    lineHeight: '20px',
+                    color: "#575757",
+                    wordBreak: 'break-word',
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    flex: '1 1 0',
+                    minWidth: 0,
+                  }}>
+                    {aspectName}
+                  </Typography>
+                </div>
+                {stewardActions}
               </div>
             );
           }
         })}
       </div>
+      <AspectEditDialog
+        open={editDialogOpen}
+        mode={editMode}
+        entry={entry}
+        aspectKey={editingAspectKey}
+        idToken={idToken}
+        aspectTypeOptions={aspectTypeOptions}
+        onClose={() => setEditDialogOpen(false)}
+        onSave={handleAspectSave}
+        saving={saving}
+      />
+      <Dialog open={Boolean(removeKey)} onClose={() => !saving && setRemoveKey(null)}>
+        <DialogTitle>Remove aspect?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This removes the aspect from the catalog entry. This action cannot be undone from this dialog.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveKey(null)} disabled={saving}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={confirmRemoveAspect} disabled={saving}>
+            Remove
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

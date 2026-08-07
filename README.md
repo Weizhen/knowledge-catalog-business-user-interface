@@ -361,3 +361,36 @@ Feature Enhancements:
 Bug Fixes:
 
   - Bugs related to random blinking of view detail page.
+
+## Steward entry edit (UpdateEntry)
+
+Optional steward-gated editing of entry overview/description and aspects via Dataplex `UpdateEntry`.
+
+### Feature flags
+
+| Flag | Where | Purpose |
+|------|--------|---------|
+| `ENABLE_ENTRY_WRITES=true` | Backend env | Kill-switch for `POST /api/v1/check-entry-write-access` and `POST /api/v1/update-entry` (default off) |
+| `VITE_FEATURE_STEWARD_EDIT=true` | Frontend env (build-time) | Shows Edit UI when the user also has write IAM |
+
+Viewers keep using the app with existing read IAM (`REQUIRED_PERMISSIONS`). Write IAM is **not** required to log in.
+
+### IAM for stewards
+
+Grant one of:
+
+- `dataplex.entries.update`
+- `dataplex.entryGroups.updateEntries`
+
+OAuth already requests `cloud-platform` in user-token mode, which covers UpdateEntry.
+
+### Rollout
+
+1. Deploy with `ENABLE_ENTRY_WRITES=false` (safe default).
+2. Enable `ENABLE_ENTRY_WRITES=true` in one environment.
+3. Grant stewards update IAM.
+4. Rebuild/redeploy frontend with `VITE_FEATURE_STEWARD_EDIT=true`.
+
+### Phase 2 (not shipped)
+
+Entry deletion via `DeleteEntry` for custom entry groups only, behind the same steward flag.
