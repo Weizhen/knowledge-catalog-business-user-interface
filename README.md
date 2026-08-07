@@ -54,8 +54,8 @@ An active Google Cloud account
 Clone the repository and install the necessary npm packages.
 
 ```cmd
-git clone https://github.com/GoogleCloudPlatform/dataplex-business-user-interface
-cd dataplex-business-user-interface
+git clone https://github.com/Weizhen/knowledge-catalog-business-user-interface
+cd knowledge-catalog-business-user-interface
 npm install
 ```
 
@@ -82,6 +82,19 @@ Open the `.env` file and replace the placeholder with your actual Client ID:
 // .env
 VITE_GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com'; // <-- PASTE YOUR ID HERE
 ```
+
+Optional — enable steward entry editing (overview / aspects) locally:
+
+```shell
+# frontend .env
+VITE_FEATURE_STEWARD_EDIT=true
+
+# backend/.env.test (or your backend .env)
+ENABLE_ENTRY_WRITES=true
+```
+
+Stewards also need IAM `dataplex.entries.update` or `dataplex.entryGroups.updateEntries` on the project. Leave both flags unset/false to keep the UI read-only (default).
+
 #### Step 4: Run the Application
 Start the Vite development server.
 
@@ -129,11 +142,11 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregi
 
 #### Step 4: Clone the repo into you Cloud shell or in case of Google cloud SDK clone it into the installed computer 
 ```shell
-git clone https://github.com/GoogleCloudPlatform/dataplex-business-user-interface
+git clone https://github.com/Weizhen/knowledge-catalog-business-user-interface
 ```
 After cloning go inside the cloned repo
 ```shell
-cd dataplex-business-user-interface
+cd knowledge-catalog-business-user-interface
 ```
 
 now before building the container if we want to do any default configs setting for ui change we can do that
@@ -238,15 +251,19 @@ gcloud run deploy [SERVICE_NAME] \
   --set-env-vars  VITE_GOOGLE_PROJECT_ID="[PROJECT_ID]" \
   --set-env-vars  VITE_GOOGLE_CLIENT_ID="[CLIENT_ID]" \
   --set-env-vars  VITE_GOOGLE_REDIRECT_URI="/auth/google/callback" \
+  --set-env-vars  VITE_FEATURE_STEWARD_EDIT="false" \
   --set-env-vars  GOOGLE_CLOUD_PROJECT_ID="[PROJECT_ID]" \
   --set-env-vars  GCP_LOCATION="global" \
-  --set-env-vars  GCP_REGION="global"
+  --set-env-vars  GCP_REGION="global" \
+  --set-env-vars  ENABLE_ENTRY_WRITES="false"
 ```
 **--platform managed**: Specifies the fully managed Cloud Run environment.
 
 **--region**: Choose a region that is close to you.
 
 **--allow-unauthenticated**: Makes the frontend publicly accessible.
+
+**Steward edit (optional):** set `VITE_FEATURE_STEWARD_EDIT="true"` and `ENABLE_ENTRY_WRITES="true"` to allow editing entry overview/description and aspects. Grant stewards `dataplex.entries.update` or `dataplex.entryGroups.updateEntries`. Viewers do not need write IAM to use the app. Keep both `"false"` for a read-only deployment.
 
 If you don't want it to be publicly accessible please use **--no-allow-unauthenticated** flag, but then you need to add the users manually to IAP(Identity Aware proxy) in the cloud run security tab of your app, or you can create a group add that group into you project and IAP(Identity Aware proxy) and assign users to that group.
 
@@ -278,12 +295,16 @@ gcloud run deploy [SERVICE_NAME] \
   --set-env-vars  VITE_GOOGLE_CLIENT_ID="[CLIENT_ID]" \
   --set-env-vars  VITE_GOOGLE_REDIRECT_URI="/auth/google/callback" \
   --set-env-vars  VITE_IS_SERVICE_ACCOUNT="true" \
+  --set-env-vars  VITE_FEATURE_STEWARD_EDIT="false" \
   --set-env-vars  GOOGLE_CLOUD_PROJECT_ID="[PROJECT_ID]" \
   --set-env-vars  GCP_LOCATION="global" \
   --set-env-vars  GCP_REGION="global" \
-  --set-env-vars  IS_SERVICE_ACCOUNT="true"
+  --set-env-vars  IS_SERVICE_ACCOUNT="true" \
+  --set-env-vars  ENABLE_ENTRY_WRITES="false"
 ```
 **--service-account**: Specifies which service account needs tp attach to Cloud Run environment to access ADC.
+
+If you enable steward edit (`VITE_FEATURE_STEWARD_EDIT=true` and `ENABLE_ENTRY_WRITES=true`) in service-account mode, also grant the Cloud Run service account `dataplex.entries.update` or `dataplex.entryGroups.updateEntries` — UpdateEntry calls use ADC, not the end-user token.
 
 Now you have the running based on service account auth API Calls and it will not ask permissions during authentication use Cloud-sdk and google cloud for API Calls.
 
@@ -344,9 +365,11 @@ gcloud run deploy [SERVICE_NAME] \
   --set-env-vars  VITE_GOOGLE_PROJECT_ID="[PROJECT_ID]" \
   --set-env-vars  VITE_GOOGLE_CLIENT_ID="[CLIENT_ID]" \
   --set-env-vars  VITE_GOOGLE_REDIRECT_URI="/auth/google/callback" \
+  --set-env-vars  VITE_FEATURE_STEWARD_EDIT="false" \
   --set-env-vars  GOOGLE_CLOUD_PROJECT_ID="[PROJECT_ID]" \
   --set-env-vars  GCP_LOCATION="global" \
-  --set-env-vars  GCP_REGION="global"
+  --set-env-vars  GCP_REGION="global" \
+  --set-env-vars  ENABLE_ENTRY_WRITES="false"
 ```
 
 **Your application is now redeployed and accessible, with both front-end and backend in one single container and cloud run service!**
@@ -364,14 +387,14 @@ Bug Fixes:
 
 ## Steward entry edit (UpdateEntry)
 
-Optional steward-gated editing of entry overview/description and aspects via Dataplex `UpdateEntry`.
+Optional steward-gated editing of entry overview/description and aspects via Dataplex `UpdateEntry`. See also the local and Cloud Run env notes in the installation steps above.
 
 ### Feature flags
 
 | Flag | Where | Purpose |
 |------|--------|---------|
-| `ENABLE_ENTRY_WRITES=true` | Backend env | Kill-switch for `POST /api/v1/check-entry-write-access` and `POST /api/v1/update-entry` (default off) |
-| `VITE_FEATURE_STEWARD_EDIT=true` | Frontend env (build-time) | Shows Edit UI when the user also has write IAM |
+| `ENABLE_ENTRY_WRITES=true` | Backend / Cloud Run env | Kill-switch for `POST /api/v1/check-entry-write-access` and `POST /api/v1/update-entry` (default off) |
+| `VITE_FEATURE_STEWARD_EDIT=true` | Frontend env (local `.env`, or Cloud Run via `entrypoint.sh` substitution) | Shows Edit UI when the user also has write IAM |
 
 Viewers keep using the app with existing read IAM (`REQUIRED_PERMISSIONS`). Write IAM is **not** required to log in.
 
@@ -382,14 +405,14 @@ Grant one of:
 - `dataplex.entries.update`
 - `dataplex.entryGroups.updateEntries`
 
-OAuth already requests `cloud-platform` in user-token mode, which covers UpdateEntry.
+OAuth already requests `cloud-platform` in user-token mode, which covers UpdateEntry. In service-account mode, grant the same update permission to the Cloud Run service account.
 
 ### Rollout
 
-1. Deploy with `ENABLE_ENTRY_WRITES=false` (safe default).
+1. Deploy with `ENABLE_ENTRY_WRITES=false` and `VITE_FEATURE_STEWARD_EDIT=false` (safe default in the Cloud Run examples).
 2. Enable `ENABLE_ENTRY_WRITES=true` in one environment.
-3. Grant stewards update IAM.
-4. Rebuild/redeploy frontend with `VITE_FEATURE_STEWARD_EDIT=true`.
+3. Grant stewards (or the Cloud Run SA) update IAM.
+4. Set `VITE_FEATURE_STEWARD_EDIT=true` on Cloud Run (or in local `.env`) and redeploy / restart so `entrypoint.sh` substitutes the flag into the built assets.
 
 ### Phase 2 (not shipped)
 
