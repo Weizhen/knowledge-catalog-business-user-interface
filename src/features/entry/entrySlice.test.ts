@@ -112,6 +112,7 @@ const getInitialState = () => ({
   entryLinksStatus: "idle" as const,
   entryLinksError: null,
   canEdit: false,
+  stewardEditUiEnabled: false,
   writeAccessStatus: "idle" as const,
   writeAccessMessage: null as string | null,
   updateStatus: "idle" as const,
@@ -1315,7 +1316,13 @@ describe("entrySlice", () => {
   describe("checkEntryWriteAccess", () => {
     it("sets canEdit true when backend grants write access", async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({
-        data: { canEdit: true, writesEnabled: true, message: "ok" },
+        data: {
+          canEdit: true,
+          stewardEditUiEnabled: true,
+          hasWriteIam: true,
+          writesEnabled: true,
+          message: "ok",
+        },
       });
       const store = createTestStore();
       await store.dispatch(
@@ -1326,12 +1333,19 @@ describe("entrySlice", () => {
       );
       const state = store.getState().entry;
       expect(state.canEdit).toBe(true);
+      expect(state.stewardEditUiEnabled).toBe(true);
       expect(state.writeAccessStatus).toBe("succeeded");
     });
 
     it("sets canEdit false when backend denies write access", async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({
-        data: { canEdit: false, writesEnabled: true, message: "missing perms" },
+        data: {
+          canEdit: false,
+          stewardEditUiEnabled: true,
+          hasWriteIam: false,
+          writesEnabled: true,
+          message: "missing perms",
+        },
       });
       const store = createTestStore();
       await store.dispatch(
@@ -1341,6 +1355,7 @@ describe("entrySlice", () => {
         })
       );
       expect(store.getState().entry.canEdit).toBe(false);
+      expect(store.getState().entry.stewardEditUiEnabled).toBe(true);
     });
   });
 

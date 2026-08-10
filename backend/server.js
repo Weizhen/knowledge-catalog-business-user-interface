@@ -233,8 +233,15 @@ function parseEntryName(entryName) {
 
 const STEWARD_WRITE_IAM_PERMISSIONS = [
   'dataplex.entries.update',
-  'dataplex.entryGroups.updateEntries',
 ];
+
+/** UI + API steward edit: both Cloud Run / env flags must be true. */
+function isStewardEditUiEnabled() {
+  return (
+    process.env.ENABLE_ENTRY_WRITES === 'true' &&
+    process.env.VITE_FEATURE_STEWARD_EDIT === 'true'
+  );
+}
 
 
 /**
@@ -649,9 +656,11 @@ app.get('/api/v1/check-entry-access', async (req, res) => {
  */
 app.post('/api/v1/check-entry-write-access', async (req, res) => {
   const writesEnabled = areEntryWritesEnabled();
+  const stewardEditUiEnabled = isStewardEditUiEnabled();
   if (!writesEnabled) {
     return res.json({
       canEdit: false,
+      stewardEditUiEnabled: false,
       permissions: STEWARD_WRITE_IAM_PERMISSIONS,
       grantedPermissions: [],
       writesEnabled: false,
@@ -689,24 +698,32 @@ app.post('/api/v1/check-entry-write-access', async (req, res) => {
     });
 
     const grantedPermissions = response.data.permissions || [];
-    // Either entries.update OR entryGroups.updateEntries is sufficient.
-    const canEdit = permissions.some((p) => grantedPermissions.includes(p));
+    const hasWriteIam = permissions.some((p) => grantedPermissions.includes(p));
+    // Show Edit when both env flags are on. IAM still reported so the UI can warn;
+    // UpdateEntry will 403 if the caller lacks dataplex.entries.update.
+    const canEdit = stewardEditUiEnabled && hasWriteIam;
 
     return res.json({
       canEdit,
+      stewardEditUiEnabled,
+      hasWriteIam,
       permissions,
       grantedPermissions,
       writesEnabled: true,
       projectId,
-      message: canEdit
-        ? `User can update entries on project ${projectId}.`
-        : `User lacks steward write permissions on project ${projectId}.`,
+      message: !stewardEditUiEnabled
+        ? 'Set both ENABLE_ENTRY_WRITES=true and VITE_FEATURE_STEWARD_EDIT=true on Cloud Run.'
+        : hasWriteIam
+          ? `User can update entries on project ${projectId}.`
+          : `Missing dataplex.entries.update on project ${projectId}. Grant roles/dataplex.catalogEditor (or equivalent).`,
     });
   } catch (error) {
     console.error('Error checking entry write access:', error.message);
     if (error.code === 403 || (error.errors && error.errors[0] && error.errors[0].reason === 'FORBIDDEN')) {
       return res.json({
         canEdit: false,
+        stewardEditUiEnabled,
+        hasWriteIam: false,
         permissions,
         grantedPermissions: [],
         writesEnabled: true,

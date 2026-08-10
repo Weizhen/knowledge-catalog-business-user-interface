@@ -263,7 +263,7 @@ gcloud run deploy [SERVICE_NAME] \
 
 **--allow-unauthenticated**: Makes the frontend publicly accessible.
 
-**Steward edit (optional):** set `VITE_FEATURE_STEWARD_EDIT="true"` and `ENABLE_ENTRY_WRITES="true"` to allow editing entry overview/description and aspects. Grant stewards `dataplex.entries.update` or `dataplex.entryGroups.updateEntries`. Viewers do not need write IAM to use the app. Keep both `"false"` for a read-only deployment.
+**Steward edit (optional):** set `VITE_FEATURE_STEWARD_EDIT="true"` and `ENABLE_ENTRY_WRITES="true"` to allow editing entry overview/description and aspects. Grant stewards `dataplex.entries.update` (e.g. `roles/dataplex.catalogEditor`). Viewers do not need write IAM to use the app. Keep both `"false"` for a read-only deployment. After changing these env vars, deploy a new Cloud Run revision (rebuild is recommended so logs show the flags; the UI flag is also read from the backend at runtime).
 
 If you don't want it to be publicly accessible please use **--no-allow-unauthenticated** flag, but then you need to add the users manually to IAP(Identity Aware proxy) in the cloud run security tab of your app, or you can create a group add that group into you project and IAP(Identity Aware proxy) and assign users to that group.
 
@@ -398,21 +398,29 @@ Optional steward-gated editing of entry overview/description and aspects via Dat
 
 Viewers keep using the app with existing read IAM (`REQUIRED_PERMISSIONS`). Write IAM is **not** required to log in.
 
+The Edit button appears only when **all** of the following are true:
+
+1. `ENABLE_ENTRY_WRITES=true` on Cloud Run (backend)
+2. `VITE_FEATURE_STEWARD_EDIT=true` on Cloud Run (read by the backend at runtime — rebuild not required for this flag to be detected)
+3. Your user (or Cloud Run SA in service-account mode) has `dataplex.entries.update` — e.g. role `roles/dataplex.catalogEditor`
+
+After changing Cloud Run env vars, deploy a **new revision** (or restart). Open an entry detail page; if flags are on but IAM is missing, a short message explains what to grant.
+
 ### IAM for stewards
 
-Grant one of:
+Grant:
 
-- `dataplex.entries.update`
-- `dataplex.entryGroups.updateEntries`
+- Permission: `dataplex.entries.update`
+- Recommended role: `roles/dataplex.catalogEditor` (or `roles/dataplex.catalogAdmin` / project Owner/Editor)
 
 OAuth already requests `cloud-platform` in user-token mode, which covers UpdateEntry. In service-account mode, grant the same update permission to the Cloud Run service account.
 
 ### Rollout
 
 1. Deploy with `ENABLE_ENTRY_WRITES=false` and `VITE_FEATURE_STEWARD_EDIT=false` (safe default in the Cloud Run examples).
-2. Enable `ENABLE_ENTRY_WRITES=true` in one environment.
-3. Grant stewards (or the Cloud Run SA) update IAM.
-4. Set `VITE_FEATURE_STEWARD_EDIT=true` on Cloud Run (or in local `.env`) and redeploy / restart so `entrypoint.sh` substitutes the flag into the built assets.
+2. Set both to `true` on the Cloud Run service and deploy a new revision.
+3. Grant stewards (or the Cloud Run SA) `roles/dataplex.catalogEditor` (or `dataplex.entries.update`).
+4. Hard-refresh the browser and open **View details** for an entry — **Edit overview** / aspect actions should appear when IAM is granted.
 
 ### Phase 2 (not shipped)
 

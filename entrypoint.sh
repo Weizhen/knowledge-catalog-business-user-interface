@@ -2,6 +2,8 @@
 
 ASSETS_DIR=/app/dist/assets
 
+echo "Steward edit env: ENABLE_ENTRY_WRITES=${ENABLE_ENTRY_WRITES:-unset} VITE_FEATURE_STEWARD_EDIT=${VITE_FEATURE_STEWARD_EDIT:-unset}"
+
 find $ASSETS_DIR -type f -name "*.js" -print0 | while IFS= read -r -d $'\0' file; do
   echo "Processing $file ..."
   # Replace placeholders with actual environment variable values
@@ -12,7 +14,7 @@ find $ASSETS_DIR -type f -name "*.js" -print0 | while IFS= read -r -d $'\0' file
   sed -i "s|__VITE_GOOGLE_CLIENT_ID__|${VITE_GOOGLE_CLIENT_ID}|g" "$file"
   sed -i "s|__VITE_GOOGLE_REDIRECT_URI__|${VITE_GOOGLE_REDIRECT_URI}|g" "$file"
   sed -i "s|__VITE_IS_SERVICE_ACCOUNT__|${VITE_IS_SERVICE_ACCOUNT}|g" "$file"
-  sed -i "s|__VITE_FEATURE_STEWARD_EDIT__|${VITE_FEATURE_STEWARD_EDIT}|g" "$file"
+  sed -i "s|__VITE_FEATURE_STEWARD_EDIT__|${VITE_FEATURE_STEWARD_EDIT:-false}|g" "$file"
 done
 
 # Start the Nginx web server

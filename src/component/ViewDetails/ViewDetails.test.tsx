@@ -405,6 +405,7 @@ describe('ViewDetails', () => {
           entryLinks,
           entryLinksStatus,
           canEdit: false,
+          stewardEditUiEnabled: false,
           writeAccessStatus: 'idle',
           writeAccessMessage: null,
           updateStatus: 'idle',

@@ -174,6 +174,8 @@ export const checkEntryWriteAccess = createAsyncThunk(
       return {
         entryName: requestData.entryName,
         canEdit: Boolean(response.data?.canEdit),
+        stewardEditUiEnabled: Boolean(response.data?.stewardEditUiEnabled),
+        hasWriteIam: Boolean(response.data?.hasWriteIam),
         writesEnabled: Boolean(response.data?.writesEnabled),
         message: response.data?.message as string | undefined,
       };
@@ -237,6 +239,7 @@ type EntryState = {
   entryLinksStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   entryLinksError: unknown | null;
   canEdit: boolean;
+  stewardEditUiEnabled: boolean;
   writeAccessStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   writeAccessMessage: string | null;
   updateStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -259,6 +262,7 @@ const initialState: EntryState = {
   entryLinksStatus: 'idle',
   entryLinksError: null,
   canEdit: false,
+  stewardEditUiEnabled: false,
   writeAccessStatus: 'idle',
   writeAccessMessage: null,
   updateStatus: 'idle',
@@ -307,6 +311,7 @@ export const entrySlice = createSlice({
     },
     clearWriteAccess: (state) => {
       state.canEdit = false;
+      state.stewardEditUiEnabled = false;
       state.writeAccessStatus = 'idle';
       state.writeAccessMessage = null;
       state.updateStatus = 'idle';
@@ -324,6 +329,7 @@ export const entrySlice = createSlice({
         state.entryLinksStatus = 'idle';
         state.entryLinksError = null;
         state.canEdit = false;
+        state.stewardEditUiEnabled = false;
         state.writeAccessStatus = 'idle';
         state.writeAccessMessage = null;
       })
@@ -389,16 +395,19 @@ export const entrySlice = createSlice({
       .addCase(checkEntryWriteAccess.pending, (state) => {
         state.writeAccessStatus = 'loading';
         state.canEdit = false;
+        state.stewardEditUiEnabled = false;
         state.writeAccessMessage = null;
       })
       .addCase(checkEntryWriteAccess.fulfilled, (state, action) => {
         state.writeAccessStatus = 'succeeded';
         state.canEdit = action.payload.canEdit;
+        state.stewardEditUiEnabled = action.payload.stewardEditUiEnabled;
         state.writeAccessMessage = action.payload.message || null;
       })
       .addCase(checkEntryWriteAccess.rejected, (state, action) => {
         state.writeAccessStatus = 'failed';
         state.canEdit = false;
+        state.stewardEditUiEnabled = false;
         state.writeAccessMessage =
           typeof action.payload === 'string'
             ? action.payload
