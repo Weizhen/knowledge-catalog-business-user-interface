@@ -97,5 +97,5 @@ export const STEWARD_WRITE_PERMISSIONS = [
 /** Frontend feature flag (Vite). Cloud Run also drives this via the write-access API. */
 export const isStewardEditFeatureEnabled = (): boolean => {
   const v = import.meta.env.VITE_FEATURE_STEWARD_EDIT;
-  return v === true || String(v ?? '').toLowerCase() === 'true';
+  return String(v ?? '').trim().replace(/^["']|["']$/g, '').toLowerCase() === 'true';
 };

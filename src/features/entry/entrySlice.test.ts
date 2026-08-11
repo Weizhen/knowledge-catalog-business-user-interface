@@ -30,10 +30,11 @@ vi.mock("axios", () => ({
   },
   AxiosError: class AxiosError extends Error {
     response?: { data: unknown; status?: number };
-    constructor(message: string, response?: { data: unknown; status?: number }) {
+    code?: string;
+    constructor(message?: string, code?: string) {
       super(message);
       this.name = "AxiosError";
-      this.response = response;
+      this.code = code;
     }
   },
 }));
@@ -1337,14 +1338,35 @@ describe("entrySlice", () => {
       expect(state.writeAccessStatus).toBe("succeeded");
     });
 
-    it("sets canEdit false when backend denies write access", async () => {
+    it("keeps canEdit true when flags are on even if IAM probe is inconclusive", async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: {
-          canEdit: false,
+          canEdit: true,
           stewardEditUiEnabled: true,
           hasWriteIam: false,
           writesEnabled: true,
-          message: "missing perms",
+          message: "Could not confirm dataplex.entries.update",
+        },
+      });
+      const store = createTestStore();
+      await store.dispatch(
+        checkEntryWriteAccess({
+          entryName: mockEntryData.name,
+          id_token: "token",
+        })
+      );
+      expect(store.getState().entry.canEdit).toBe(true);
+      expect(store.getState().entry.stewardEditUiEnabled).toBe(true);
+    });
+
+    it("sets canEdit false when steward flags are off", async () => {
+      vi.mocked(axios.post).mockResolvedValueOnce({
+        data: {
+          canEdit: false,
+          stewardEditUiEnabled: false,
+          hasWriteIam: false,
+          writesEnabled: false,
+          message: "Entry writes are disabled",
         },
       });
       const store = createTestStore();
@@ -1355,7 +1377,7 @@ describe("entrySlice", () => {
         })
       );
       expect(store.getState().entry.canEdit).toBe(false);
-      expect(store.getState().entry.stewardEditUiEnabled).toBe(true);
+      expect(store.getState().entry.stewardEditUiEnabled).toBe(false);
     });
   });
 
@@ -1377,10 +1399,12 @@ describe("entrySlice", () => {
     });
 
     it("maps 403 to PERMISSION_DENIED", async () => {
-      const err = new AxiosError("forbidden", {
+      const err = new AxiosError("forbidden");
+      // Real AxiosError puts status on response; attach for the thunk's instanceof checks.
+      (err as AxiosError & { response?: { status: number; data: unknown } }).response = {
         status: 403,
         data: { error: "Permission Denied" },
-      });
+      };
       vi.mocked(axios.post).mockRejectedValueOnce(err);
       const store = createTestStore();
       const result = await store.dispatch(

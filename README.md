@@ -398,13 +398,14 @@ Optional steward-gated editing of entry overview/description and aspects via Dat
 
 Viewers keep using the app with existing read IAM (`REQUIRED_PERMISSIONS`). Write IAM is **not** required to log in.
 
-The Edit button appears only when **all** of the following are true:
+The Edit button appears only when **both** Cloud Run env flags are true:
 
-1. `ENABLE_ENTRY_WRITES=true` on Cloud Run (backend)
-2. `VITE_FEATURE_STEWARD_EDIT=true` on Cloud Run (read by the backend at runtime — rebuild not required for this flag to be detected)
-3. Your user (or Cloud Run SA in service-account mode) has `dataplex.entries.update` — e.g. role `roles/dataplex.catalogEditor`
+1. `ENABLE_ENTRY_WRITES=true`
+2. `VITE_FEATURE_STEWARD_EDIT=true`
 
-After changing Cloud Run env vars, deploy a **new revision** (or restart). Open an entry detail page; if flags are on but IAM is missing, a short message explains what to grant.
+Do **not** wrap values in extra quotes in the Cloud Run console (use `true`, not `"true"`). After changing env vars, deploy a **new revision**.
+
+IAM (`roles/dataplex.catalogEditor` / `dataplex.entries.update`) is still required for **saving**; the Edit button is shown whenever both flags are on. UpdateEntry enforces permissions on save.
 
 ### IAM for stewards
 

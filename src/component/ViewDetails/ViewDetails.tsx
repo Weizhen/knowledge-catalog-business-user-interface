@@ -39,7 +39,6 @@ import TableInsights from '../TableInsights/TableInsights';
 import DatasetInsights from '../TableInsights/DatasetInsights';
 import { useNoAccess } from '../../contexts/NoAccessContext';
 import { useNotification } from '../../contexts/NotificationContext';
-import { isStewardEditFeatureEnabled } from '../../constants/auth';
 import { aspectKeyFromAspectTypeName } from '../../constants/stewardEdit';
 // import { useFavorite } from '../../hooks/useFavorite'
 
@@ -128,9 +127,8 @@ const ViewDetails = () => {
   const allScans = useSelector(selectAllScans);
   const allScansStatus = useSelector(selectAllScansStatus);
   const initialTabName = (location.state as any)?.tabName as string | undefined;
-  // Cloud Run: stewardEditUiEnabled comes from backend env (reliable). Vite flag covers local .env.
-  const stewardEditEnabled = stewardEditUiEnabled || isStewardEditFeatureEnabled();
-  const canEdit = stewardEditEnabled && canEditEntry;
+  // Edit chrome follows API canEdit (both Cloud Run env flags on). IAM is enforced on save.
+  const canEdit = Boolean(canEditEntry);
   const tabNameApplied = React.useRef(false);
   const fetchedLinksEntryId = React.useRef<string | null>(null);
   const [tabValue, setTabValue] = React.useState(0);
@@ -1173,14 +1171,24 @@ const ctaButtons = (
                       </div>
                     )}
 
-                    {stewardEditEnabled && writeAccessStatus === 'succeeded' && !canEditEntry && (
+                    {writeAccessStatus === 'succeeded' && stewardEditUiEnabled && !canEditEntry && (
                       <div style={{
                         fontFamily: '"Google Sans", sans-serif',
                         fontSize: '12px',
                         color: '#5F6368',
                         marginTop: '4px',
                       }}>
-                        {writeAccessMessage || "You don't have permission to edit this entry. Grant dataplex.entries.update (e.g. roles/dataplex.catalogEditor)."}
+                        {writeAccessMessage || "Steward edit flags look incomplete. Confirm ENABLE_ENTRY_WRITES and VITE_FEATURE_STEWARD_EDIT on Cloud Run."}
+                      </div>
+                    )}
+                    {writeAccessStatus === 'succeeded' && canEditEntry && writeAccessMessage && writeAccessMessage.includes('Could not confirm') && (
+                      <div style={{
+                        fontFamily: '"Google Sans", sans-serif',
+                        fontSize: '12px',
+                        color: '#5F6368',
+                        marginTop: '4px',
+                      }}>
+                        {writeAccessMessage}
                       </div>
                     )}
 
