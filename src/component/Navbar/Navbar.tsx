@@ -55,6 +55,9 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
   const isOnSearchPage = location.pathname === '/search';
   const shouldShiftNavbar = isOnSearchPage && isSearchFiltersOpen;
   const iconColor = mode === 'dark' ? '#9aa0a6' : '#5F6367';
+  const ericssonLogoSrc = mode === 'dark'
+    ? '/assets/images/ericsson-logo-rgbw.png'
+    : '/assets/images/ericsson-logo-rgb.png';
   const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
   const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
   const [openFeedback, setOpenFeedback] = React.useState<boolean>(false);
@@ -153,15 +156,41 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
           <Box onClick={handleLogoClick} sx={{
             display: { xs: 'none', md: 'flex' },
             flex: "0 0 auto",
-            width: "162px",
+            alignItems: "center",
+            gap: "12px",
             height: "40px",
             cursor: "pointer",
           }}>
             <img
-              src="/assets/svg/knowledge-catalog-logo-v2.svg"
-              alt="Knowledge Catalog"
-              style={{ width: '162px', height: '40px' }}
+              src={ericssonLogoSrc}
+              alt="Ericsson"
+              style={{ width: '148px', height: '30px', objectFit: 'contain' }}
             />
+            <Box sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              borderLeft: mode === 'dark' ? '1px solid #3c4043' : '1px solid #DADCE0',
+              pl: '12px',
+              lineHeight: 1.15,
+            }}>
+              <Typography sx={{
+                fontFamily: '"Google Sans", sans-serif',
+                fontSize: '11px',
+                fontWeight: 600,
+                color: mode === 'dark' ? '#e8eaed' : '#3C4043',
+                letterSpacing: '0.2px',
+              }}>
+                Knowledge Catalog
+              </Typography>
+              <Typography sx={{
+                fontFamily: '"Google Sans", sans-serif',
+                fontSize: '10px',
+                fontWeight: 400,
+                color: mode === 'dark' ? '#9aa0a6' : '#5F6368',
+              }}>
+                Business Interface
+              </Typography>
+            </Box>
           </Box>
 
           {searchBar && location.pathname !== '/admin-panel' ? (
@@ -235,14 +264,14 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
             flex: "1 1 auto",
             justifyContent: "center",
             alignItems: "center",
-            height: "2rem"
+            height: "2rem",
+            cursor: "pointer",
           }}>
-            <div className="logo-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', cursor: "pointer" }}>
-                <label style={{ fontSize: "19px", fontWeight: 700, color: mode === 'dark' ? '#c4c7c5' : "#0B57D0", lineHeight: 1, cursor: "pointer" }}>Knowledge</label>
-                <label style={{ fontSize: "12px", fontWeight: 700, color: mode === 'dark' ? '#c4c7c5' : "#0B57D0", lineHeight: 1, cursor: "pointer" }}>Catalog</label>
-              </div>
-            </div>
+            <img
+              src={ericssonLogoSrc}
+              alt="Ericsson"
+              style={{ height: '24px', width: 'auto', objectFit: 'contain' }}
+            />
           </Box>
 
           {/* Right Section - Icons and Avatar */}

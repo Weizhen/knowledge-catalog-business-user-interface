@@ -157,9 +157,9 @@ describe('Navbar', () => {
       expect(screen.getByLabelText('Feedback')).toBeInTheDocument();
     });
 
-    it('renders the Knowledge Catalog logo (desktop)', () => {
+    it('renders the Ericsson logo (desktop)', () => {
       renderNavbar();
-      expect(screen.getByAltText('Knowledge Catalog')).toBeInTheDocument();
+      expect(screen.getAllByAltText('Ericsson').length).toBeGreaterThan(0);
     });
 
     it('renders the user avatar', () => {
@@ -186,13 +186,13 @@ describe('Navbar', () => {
   describe('Logo click', () => {
     it('navigates to /home when logo is clicked', () => {
       renderNavbar();
-      fireEvent.click(screen.getByAltText('Knowledge Catalog'));
+      fireEvent.click(screen.getAllByAltText('Ericsson')[0]);
       expect(mockNavigate).toHaveBeenCalledWith('/home');
     });
 
     it('calls updateUser when logo is clicked with a logged-in user', () => {
       renderNavbar();
-      fireEvent.click(screen.getByAltText('Knowledge Catalog'));
+      fireEvent.click(screen.getAllByAltText('Ericsson')[0]);
       expect(mockAuthContextValue.updateUser).toHaveBeenCalled();
     });
   });
@@ -344,7 +344,7 @@ describe('Navbar', () => {
           </BrowserRouter>
         </Provider>
       );
-      fireEvent.click(screen.getByAltText('Knowledge Catalog'));
+      fireEvent.click(screen.getAllByAltText('Ericsson')[0]);
       expect(mockAuthContextValue.updateUser).not.toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/home');
     });

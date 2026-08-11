@@ -5,7 +5,7 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { sanitizeRedirectURL } from '../../../services/urlPreservationService';
 import { CircularProgress } from '@mui/material';
-import dataplexLogo from '../../../assets/svg/knowledge-catalog-logo-v2.svg';
+import ericssonLogo from '../../../assets/images/ericsson-logo-rgb.png';
 import googleLogo from '../../../assets/images/google-logo-figma-53c44d.png';
 import { REQUIRED_SCOPES } from '../../../constants/auth';
 
@@ -76,11 +76,12 @@ const LoginV2: React.FC = () => {
         {/* Left Panel - Brand & messaging */}
         <div className="loginv2-left">
           <img
-            src={dataplexLogo}
-            style={{ width: '197.52px', height: '48.05px' }}
-            alt="Knowledge Catalog"
+            src={ericssonLogo}
+            style={{ width: '200px', height: 'auto' }}
+            alt="Ericsson"
             className="loginv2-logo"
           />
+          <p className="loginv2-product-label">Knowledge Catalog</p>
           <h1 className="loginv2-heading">
             Your gateway to data discovery
           </h1>

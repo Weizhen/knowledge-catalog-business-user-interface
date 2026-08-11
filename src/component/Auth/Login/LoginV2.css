@@ -33,10 +33,20 @@
 }
 
 .loginv2-logo {
-  width: 155px;
+  width: 200px;
   height: auto;
   object-fit: contain;
-  margin-bottom: 42px;
+  margin-bottom: 16px;
+}
+
+.loginv2-product-label {
+  margin: 0 0 24px 0;
+  font-family: "Google Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #5F6368;
 }
 
 .loginv2-heading {

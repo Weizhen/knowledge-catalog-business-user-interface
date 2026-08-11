@@ -135,10 +135,7 @@ html[data-theme="dark"] .MuiPopover-paper .MuiDivider-root {
   border-color: #3c4043;
 }
 
-/* --- Knowledge Catalog Logo (img tag, inverted to white for dark mode) --- */
-html[data-theme="dark"] .app-layout img[alt="Knowledge Catalog"] {
-  filter: brightness(0) invert(1) brightness(0.85);
-}
+/* Brand logos swap via RGB / RGBW assets — no CSS invert needed */
 
 /* ==========================================================================
    Navbar SearchBar (variant="navbar") — Dark Mode
