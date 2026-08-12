@@ -22,6 +22,11 @@ import SendFeedback from './SendFeedback';
 import NotificationBar from '../SearchPage/NotificationBar';
 import UserAccountDropdown from './UserAccountDropdown';
 import SearchBar from '../SearchBar/SearchBar';
+import {
+  APP_PRODUCT_NAME_LINE1,
+  APP_PRODUCT_NAME_LINE2,
+  APP_VERSION,
+} from '../../constants/branding';
 
 interface NavBarProps {
   searchBar?: boolean;
@@ -172,23 +177,38 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
               borderLeft: mode === 'dark' ? '1px solid #3c4043' : '1px solid #DADCE0',
               pl: '12px',
               lineHeight: 1.15,
+              maxWidth: '280px',
             }}>
               <Typography sx={{
                 fontFamily: '"Google Sans", sans-serif',
                 fontSize: '11px',
                 fontWeight: 600,
                 color: mode === 'dark' ? '#e8eaed' : '#3C4043',
-                letterSpacing: '0.2px',
+                letterSpacing: '0.1px',
               }}>
-                Knowledge Catalog
+                {APP_PRODUCT_NAME_LINE1}
               </Typography>
               <Typography sx={{
                 fontFamily: '"Google Sans", sans-serif',
-                fontSize: '10px',
-                fontWeight: 400,
-                color: mode === 'dark' ? '#9aa0a6' : '#5F6368',
+                fontSize: '11px',
+                fontWeight: 600,
+                color: mode === 'dark' ? '#e8eaed' : '#3C4043',
+                letterSpacing: '0.1px',
               }}>
-                Business Interface
+                {APP_PRODUCT_NAME_LINE2}
+              </Typography>
+              <Typography
+                component="span"
+                title={`App version ${APP_VERSION}`}
+                sx={{
+                  fontFamily: '"Google Sans Text", sans-serif',
+                  fontSize: '10px',
+                  fontWeight: 400,
+                  color: mode === 'dark' ? '#9aa0a6' : '#5F6368',
+                  mt: '2px',
+                }}
+              >
+                v{APP_VERSION}
               </Typography>
             </Box>
           </Box>
@@ -282,6 +302,21 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
             justifyContent: "flex-end",
             gap: "8px",
           }}>
+            <Typography
+              component="span"
+              title={`App version ${APP_VERSION}`}
+              sx={{
+                display: { xs: 'inline', md: 'none' },
+                fontFamily: '"Google Sans Text", sans-serif',
+                fontSize: '10px',
+                fontWeight: 500,
+                color: mode === 'dark' ? '#9aa0a6' : '#5F6368',
+                mr: '4px',
+                userSelect: 'all',
+              }}
+            >
+              v{APP_VERSION}
+            </Typography>
             <Box sx={{
               display: "flex",
               alignItems: "center",

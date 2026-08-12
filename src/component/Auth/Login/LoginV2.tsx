@@ -8,6 +8,7 @@ import { CircularProgress } from '@mui/material';
 import ericssonLogo from '../../../assets/images/ericsson-logo-rgb.png';
 import googleLogo from '../../../assets/images/google-logo-figma-53c44d.png';
 import { REQUIRED_SCOPES } from '../../../constants/auth';
+import { APP_PRODUCT_NAME, APP_VERSION } from '../../../constants/branding';
 
 const GOOGLE_OAUTH_SCOPES = import.meta.env.VITE_IS_SERVICE_ACCOUNT === "true" ? [
   'https://www.googleapis.com/auth/userinfo.email',
@@ -81,7 +82,8 @@ const LoginV2: React.FC = () => {
             alt="Ericsson"
             className="loginv2-logo"
           />
-          <p className="loginv2-product-label">Knowledge Catalog</p>
+          <p className="loginv2-product-label">{APP_PRODUCT_NAME}</p>
+          <p className="loginv2-version" title={`App version ${APP_VERSION}`}>v{APP_VERSION}</p>
           <h1 className="loginv2-heading">
             Your gateway to data discovery
           </h1>

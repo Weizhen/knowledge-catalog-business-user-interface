@@ -40,13 +40,23 @@
 }
 
 .loginv2-product-label {
-  margin: 0 0 24px 0;
+  margin: 0 0 4px 0;
   font-family: "Google Sans", sans-serif;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  text-transform: none;
   color: #5F6368;
+  line-height: 1.35;
+}
+
+.loginv2-version {
+  margin: 0 0 20px 0;
+  font-family: "Google Sans Text", sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #80868B;
+  user-select: all;
 }
 
 .loginv2-heading {

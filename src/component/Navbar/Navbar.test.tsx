@@ -162,6 +162,13 @@ describe('Navbar', () => {
       expect(screen.getAllByAltText('Ericsson').length).toBeGreaterThan(0);
     });
 
+    it('renders the product name and version', () => {
+      renderNavbar();
+      expect(screen.getByText('Group Marketing Data Context')).toBeInTheDocument();
+      expect(screen.getByText('Management Platform')).toBeInTheDocument();
+      expect(screen.getAllByText(/^v1\.4\.2$/).length).toBeGreaterThan(0);
+    });
+
     it('renders the user avatar', () => {
       renderNavbar();
       expect(screen.getByAltText('Test User')).toBeInTheDocument();
