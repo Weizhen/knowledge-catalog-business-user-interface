@@ -1359,6 +1359,36 @@ describe("entrySlice", () => {
       expect(store.getState().entry.stewardEditUiEnabled).toBe(true);
     });
 
+    it("does not clear canEdit on a later rejected write-access probe", async () => {
+      vi.mocked(axios.post)
+        .mockResolvedValueOnce({
+          data: {
+            canEdit: true,
+            stewardEditUiEnabled: true,
+            hasWriteIam: true,
+            writesEnabled: true,
+            message: "ok",
+          },
+        })
+        .mockRejectedValueOnce(new AxiosError("network", { data: { error: "boom" }, status: 500 }));
+      const store = createTestStore();
+      await store.dispatch(
+        checkEntryWriteAccess({
+          entryName: mockEntryData.name,
+          id_token: "token",
+        })
+      );
+      expect(store.getState().entry.canEdit).toBe(true);
+      await store.dispatch(
+        checkEntryWriteAccess({
+          entryName: mockEntryData.name,
+          id_token: "token",
+        })
+      );
+      expect(store.getState().entry.canEdit).toBe(true);
+      expect(store.getState().entry.writeAccessStatus).toBe("failed");
+    });
+
     it("sets canEdit false when steward flags are off", async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: {

@@ -111,7 +111,6 @@ const ViewDetails = () => {
   const entryLinks = useSelector((state: any) => state.entry.entryLinks) as GlossaryItem[];
   const entryLinksStatus = useSelector((state: any) => state.entry.entryLinksStatus);
   const canEditEntry = useSelector((state: any) => state.entry.canEdit) as boolean;
-  const stewardEditUiEnabled = useSelector((state: any) => state.entry.stewardEditUiEnabled) as boolean;
   const writeAccessStatus = useSelector((state: any) => state.entry.writeAccessStatus) as string;
   const writeAccessMessage = useSelector((state: any) => state.entry.writeAccessMessage) as string | null;
   const updateStatus = useSelector((state: any) => state.entry.updateStatus) as 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -356,9 +355,10 @@ const ViewDetails = () => {
 
   const aspectTypeOptions = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const aspectsList = (user as any)?.appConfig?.aspects || [];
+    const aspectsList = (user as any)?.appConfig?.aspects;
+    const list = Array.isArray(aspectsList) ? aspectsList : [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return aspectsList.map((a: any) => {
+    return list.map((a: any) => {
       const entryLike = a?.dataplexEntry || a;
       const name =
         entryLike?.name?.includes('/aspectTypes/')
@@ -1171,14 +1171,24 @@ const ctaButtons = (
                       </div>
                     )}
 
-                    {writeAccessStatus === 'succeeded' && stewardEditUiEnabled && !canEditEntry && (
+                    {writeAccessStatus === 'failed' && (
+                      <div style={{
+                        fontFamily: '"Google Sans", sans-serif',
+                        fontSize: '12px',
+                        color: '#B3261E',
+                        marginTop: '4px',
+                      }}>
+                        {writeAccessMessage || 'Could not check steward edit access. Hard-refresh and confirm Cloud Run flags.'}
+                      </div>
+                    )}
+                    {writeAccessStatus === 'succeeded' && !canEditEntry && (
                       <div style={{
                         fontFamily: '"Google Sans", sans-serif',
                         fontSize: '12px',
                         color: '#5F6368',
                         marginTop: '4px',
                       }}>
-                        {writeAccessMessage || "Steward edit flags look incomplete. Confirm ENABLE_ENTRY_WRITES and VITE_FEATURE_STEWARD_EDIT on Cloud Run."}
+                        {writeAccessMessage || "Steward edit is off. Set ENABLE_ENTRY_WRITES=true and VITE_FEATURE_STEWARD_EDIT=true on Cloud Run, then deploy a new revision."}
                       </div>
                     )}
                     {writeAccessStatus === 'succeeded' && canEditEntry && writeAccessMessage && writeAccessMessage.includes('Could not confirm') && (

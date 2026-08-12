@@ -393,10 +393,8 @@ export const entrySlice = createSlice({
         };
       })
       .addCase(checkEntryWriteAccess.pending, (state) => {
+        // Keep prior canEdit while rechecking so the Edit button does not flicker off.
         state.writeAccessStatus = 'loading';
-        state.canEdit = false;
-        state.stewardEditUiEnabled = false;
-        state.writeAccessMessage = null;
       })
       .addCase(checkEntryWriteAccess.fulfilled, (state, action) => {
         state.writeAccessStatus = 'succeeded';
@@ -406,12 +404,13 @@ export const entrySlice = createSlice({
       })
       .addCase(checkEntryWriteAccess.rejected, (state, action) => {
         state.writeAccessStatus = 'failed';
-        state.canEdit = false;
-        state.stewardEditUiEnabled = false;
+        // Do not clear a previously granted canEdit on a transient probe failure.
         state.writeAccessMessage =
           typeof action.payload === 'string'
             ? action.payload
-            : (action.payload as any)?.message || 'Unable to verify write access';
+            : (action.payload as any)?.error ||
+              (action.payload as any)?.message ||
+              'Unable to verify write access';
       })
       .addCase(updateEntry.pending, (state) => {
         state.updateStatus = 'loading';

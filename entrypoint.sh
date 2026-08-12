@@ -17,6 +17,7 @@ find $ASSETS_DIR -type f -name "*.js" -print0 | while IFS= read -r -d $'\0' file
   sed -i "s|__VITE_FEATURE_STEWARD_EDIT__|${VITE_FEATURE_STEWARD_EDIT:-false}|g" "$file"
 done
 
-# Start the Nginx web server
-echo "env setup done and run npm"
-npm start
+# Start backend directly (avoid `npm start` → `--env-file=.env.test`, which can
+# load local ENABLE_ENTRY_WRITES=false and confuse Cloud Run rollouts).
+echo "env setup done; starting node server.js"
+exec node server.js

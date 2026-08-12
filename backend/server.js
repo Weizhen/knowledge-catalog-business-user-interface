@@ -209,11 +209,25 @@ function checkErrorAndSendResponse(res, error, customMessage) {
 
 /** Kill-switch for steward write endpoints (UpdateEntry). Default off for safe rollout. */
 function envFlagTrue(name) {
-  // Cloud Run / gcloud sometimes store quoted or spaced values ("true", 'true', true ).
+  // Cloud Run / gcloud / .env sometimes store quoted, spaced, or BOM-prefixed values.
   const raw = process.env[name];
   if (raw === undefined || raw === null) return false;
-  const v = String(raw).trim().replace(/^["']|["']$/g, '').toLowerCase();
-  return v === 'true' || v === '1' || v === 'yes';
+  const v = String(raw)
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'y';
+}
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
 }
 
 function areEntryWritesEnabled() {
@@ -677,29 +691,40 @@ app.post('/api/v1/check-entry-write-access', async (req, res) => {
       grantedPermissions: [],
       writesEnabled,
       message: !writesEnabled
-        ? 'Entry writes are disabled (ENABLE_ENTRY_WRITES is not true).'
-        : 'Steward edit UI is disabled (VITE_FEATURE_STEWARD_EDIT is not true). Set both flags on Cloud Run.',
+        ? `Entry writes are disabled (ENABLE_ENTRY_WRITES=${JSON.stringify(process.env.ENABLE_ENTRY_WRITES)}).`
+        : `Steward edit UI is disabled (VITE_FEATURE_STEWARD_EDIT=${JSON.stringify(process.env.VITE_FEATURE_STEWARD_EDIT)}). Set both flags on Cloud Run.`,
     });
   }
 
-  const { entryName } = req.body || {};
-  if (!entryName || typeof entryName !== 'string') {
-    return res.status(400).json({ error: 'entryName is required and must be a non-empty string.' });
-  }
-
-  const parsed = parseEntryName(entryName);
-  if (!parsed) {
-    return res.status(400).json({
-      error: 'Invalid entryName. Expected projects/{project}/locations/{location}/entryGroups/{group}/entries/{id}.',
-    });
-  }
-
-  const accessToken = req.headers.authorization?.split(' ')[1];
   const permissions = STEWARD_WRITE_IAM_PERMISSIONS;
+  const { entryName } = req.body || {};
 
-  // When both feature flags are on, show Edit controls. IAM is checked for messaging /
-  // diagnostics only — CRM testIamPermissions can false-negative across project id/number
-  // boundaries, while UpdateEntry still enforces real permissions on save.
+  // Flags are on → always enable Edit UI. Do not 400 on entryName/IAM issues:
+  // those previously left the frontend canEdit=false with no button.
+  const parsed = typeof entryName === 'string' ? parseEntryName(entryName) : null;
+  const accessToken = req.headers.authorization?.split(' ')[1];
+
+  const baseEnabled = {
+    canEdit: true,
+    stewardEditUiEnabled: true,
+    permissions,
+    writesEnabled: true,
+  };
+
+  if (!parsed) {
+    console.warn(
+      `[check-entry-write-access] flags on; skipping IAM probe (entryName missing or unparsable): ${entryName}`
+    );
+    return res.json({
+      ...baseEnabled,
+      hasWriteIam: false,
+      grantedPermissions: [],
+      message:
+        'Steward edit enabled (flags on). Entry name missing/unparsable for IAM probe; UpdateEntry still enforces IAM on save.',
+    });
+  }
+
+  // IAM probe is diagnostic-only and must not block or fail the Edit UI.
   try {
     const oauth2Client = getAuthClient(accessToken);
     const cloudResourceManager = google.cloudresourcemanager({
@@ -716,10 +741,14 @@ app.post('/api/v1/check-entry-write-access', async (req, res) => {
     let testedProjectId = projectsToTest[0];
     for (const projectId of projectsToTest) {
       try {
-        const response = await cloudResourceManager.projects.testIamPermissions({
-          resource: projectId,
-          requestBody: { permissions },
-        });
+        const response = await withTimeout(
+          cloudResourceManager.projects.testIamPermissions({
+            resource: projectId,
+            requestBody: { permissions },
+          }),
+          2000,
+          `testIamPermissions(${projectId})`
+        );
         const granted = response.data.permissions || [];
         if (permissions.some((p) => granted.includes(p))) {
           grantedPermissions = granted;
@@ -736,14 +765,14 @@ app.post('/api/v1/check-entry-write-access', async (req, res) => {
     }
 
     const hasWriteIam = permissions.some((p) => grantedPermissions.includes(p));
+    console.log(
+      `[check-entry-write-access] canEdit=true hasWriteIam=${hasWriteIam} project=${testedProjectId}`
+    );
 
     return res.json({
-      canEdit: true,
-      stewardEditUiEnabled: true,
+      ...baseEnabled,
       hasWriteIam,
-      permissions,
       grantedPermissions,
-      writesEnabled: true,
       projectId: testedProjectId,
       message: hasWriteIam
         ? `Steward edit enabled; write IAM confirmed on project ${testedProjectId}.`
@@ -751,14 +780,10 @@ app.post('/api/v1/check-entry-write-access', async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking entry write access:', error.message);
-    // Flags are on — still allow Edit UI; save path enforces IAM.
     return res.json({
-      canEdit: true,
-      stewardEditUiEnabled: true,
+      ...baseEnabled,
       hasWriteIam: false,
-      permissions,
       grantedPermissions: [],
-      writesEnabled: true,
       message: `Steward edit enabled, but permission probe failed: ${error.message}`,
     });
   }

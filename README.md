@@ -403,9 +403,11 @@ The Edit button appears only when **both** Cloud Run env flags are true:
 1. `ENABLE_ENTRY_WRITES=true`
 2. `VITE_FEATURE_STEWARD_EDIT=true`
 
-Do **not** wrap values in extra quotes in the Cloud Run console (use `true`, not `"true"`). After changing env vars, deploy a **new revision**.
+Do **not** wrap values in extra quotes in the Cloud Run console (use `true`, not `"true"`). After changing env vars, deploy a **new revision** (rebuild the image so `entrypoint.sh` starts `node server.js` without loading `backend/.env.test`).
 
 IAM (`roles/dataplex.catalogEditor` / `dataplex.entries.update`) is still required for **saving**; the Edit button is shown whenever both flags are on. UpdateEntry enforces permissions on save.
+
+On the entry details page, look for **Edit overview** next to the Documentation heading on the Overview tab (not in the page header). If steward edit is off or the write-access probe fails, a short status line appears under the entry title.
 
 ### IAM for stewards
 
