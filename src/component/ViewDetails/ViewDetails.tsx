@@ -1188,7 +1188,7 @@ const ctaButtons = (
                         color: '#5F6368',
                         marginTop: '4px',
                       }}>
-                        {writeAccessMessage || "Steward edit is off. Set ENABLE_ENTRY_WRITES=true and VITE_FEATURE_STEWARD_EDIT=true on Cloud Run, then deploy a new revision."}
+                        {writeAccessMessage || "Steward edit is off. Set ENABLE_ENTRY_WRITES=true on Cloud Run and deploy a new revision."}
                       </div>
                     )}
                     {writeAccessStatus === 'succeeded' && canEditEntry && writeAccessMessage && writeAccessMessage.includes('Could not confirm') && (

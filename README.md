@@ -393,19 +393,18 @@ Optional steward-gated editing of entry overview/description and aspects via Dat
 
 | Flag | Where | Purpose |
 |------|--------|---------|
-| `ENABLE_ENTRY_WRITES=true` | Backend / Cloud Run env | Kill-switch for `POST /api/v1/check-entry-write-access` and `POST /api/v1/update-entry` (default off) |
-| `VITE_FEATURE_STEWARD_EDIT=true` | Frontend env (local `.env`, or Cloud Run via `entrypoint.sh` substitution) | Shows Edit UI when the user also has write IAM |
+| `ENABLE_ENTRY_WRITES=true` | Backend / Cloud Run env | Kill-switch for Edit UI and `POST /api/v1/update-entry` (default off) |
+| `VITE_FEATURE_STEWARD_EDIT=true` | Optional frontend placeholder | No longer required for the Edit button. Kept for local Vite builds only. |
 
 Viewers keep using the app with existing read IAM (`REQUIRED_PERMISSIONS`). Write IAM is **not** required to log in.
 
-The Edit button appears only when **both** Cloud Run env flags are true:
+The Edit button appears when Cloud Run has:
 
 1. `ENABLE_ENTRY_WRITES=true`
-2. `VITE_FEATURE_STEWARD_EDIT=true`
 
-Do **not** wrap values in extra quotes in the Cloud Run console (use `true`, not `"true"`). After changing env vars, deploy a **new revision** (rebuild the image so `entrypoint.sh` starts `node server.js` without loading `backend/.env.test`).
+Do **not** wrap values in extra quotes in the Cloud Run console (use `true`, not `"true"`). After changing env vars, deploy a **new revision**. Confirm the header shows **v1.4.3** (or later). Startup logs should include `canEdit=true`. You can also open `/api/steward-edit-status` on the Cloud Run URL.
 
-IAM (`roles/dataplex.catalogEditor` / `dataplex.entries.update`) is still required for **saving**; the Edit button is shown whenever both flags are on. UpdateEntry enforces permissions on save.
+IAM (`roles/dataplex.catalogEditor` / `dataplex.entries.update`) is still required for **saving**; the Edit button is shown whenever `ENABLE_ENTRY_WRITES` is on. UpdateEntry enforces permissions on save.
 
 On the entry details page, look for **Edit overview** next to the Documentation heading on the Overview tab (not in the page header). If steward edit is off or the write-access probe fails, a short status line appears under the entry title.
 
@@ -420,10 +419,11 @@ OAuth already requests `cloud-platform` in user-token mode, which covers UpdateE
 
 ### Rollout
 
-1. Deploy with `ENABLE_ENTRY_WRITES=false` and `VITE_FEATURE_STEWARD_EDIT=false` (safe default in the Cloud Run examples).
-2. Set both to `true` on the Cloud Run service and deploy a new revision.
-3. Grant stewards (or the Cloud Run SA) `roles/dataplex.catalogEditor` (or `dataplex.entries.update`).
-4. Hard-refresh the browser and open **View details** for an entry — **Edit overview** / aspect actions should appear when IAM is granted.
+1. Deploy with `ENABLE_ENTRY_WRITES=false` (safe default in the Cloud Run examples).
+2. Set `ENABLE_ENTRY_WRITES=true` on the Cloud Run service and deploy a **new revision** (rebuild the image).
+3. Confirm the navbar shows **v1.4.3** and Cloud Run logs include `[steward-edit] canEdit=true`.
+4. Grant stewards (or the Cloud Run SA) `roles/dataplex.catalogEditor` (or `dataplex.entries.update`).
+5. Hard-refresh the browser and open **View details** — **Edit overview** is next to Documentation.
 
 ### Phase 2 (not shipped)
 

@@ -208,16 +208,56 @@ function checkErrorAndSendResponse(res, error, customMessage) {
 }
 
 /** Kill-switch for steward write endpoints (UpdateEntry). Default off for safe rollout. */
-function envFlagTrue(name) {
-  // Cloud Run / gcloud / .env sometimes store quoted, spaced, or BOM-prefixed values.
-  const raw = process.env[name];
-  if (raw === undefined || raw === null) return false;
-  const v = String(raw)
+function findEnvKey(names) {
+  const keys = Object.keys(process.env);
+  for (const wanted of names) {
+    if (Object.prototype.hasOwnProperty.call(process.env, wanted)) return wanted;
+    const found = keys.find((k) => k.trim().toLowerCase() === wanted.toLowerCase());
+    if (found) return found;
+  }
+  return names[0];
+}
+
+function parseEnvFlag(raw) {
+  if (raw === true || raw === 1) return true;
+  if (raw === false || raw === 0 || raw === undefined || raw === null) return false;
+  let v = String(raw)
     .replace(/^\uFEFF/, '')
+    .replace(/[\u0000-\u001F\u007F\u00A0\u200B\u200C\u200D\uFEFF]/g, '')
+    .replace(/\r/g, '')
     .trim()
-    .replace(/^["']+|["']+$/g, '')
     .toLowerCase();
-  return v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'y';
+  while (
+    (v.startsWith('"') && v.endsWith('"') && v.length >= 2) ||
+    (v.startsWith("'") && v.endsWith("'") && v.length >= 2)
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  if (v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'y' || v === 'enabled') {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(v);
+    return parsed === true || parsed === 1;
+  } catch {
+    return false;
+  }
+}
+
+function envFlagTrue(...names) {
+  const key = findEnvKey(names);
+  return parseEnvFlag(process.env[key]);
+}
+
+function describeEnvFlag(...names) {
+  const key = findEnvKey(names);
+  const raw = process.env[key];
+  return {
+    key,
+    present: raw !== undefined,
+    parsed: parseEnvFlag(raw),
+    json: JSON.stringify(raw),
+  };
 }
 
 function withTimeout(promise, ms, label) {
@@ -231,7 +271,10 @@ function withTimeout(promise, ms, label) {
 }
 
 function areEntryWritesEnabled() {
-  return envFlagTrue('ENABLE_ENTRY_WRITES');
+  // Single Cloud Run kill-switch. Do not also require VITE_FEATURE_STEWARD_EDIT:
+  // that name is a Vite build placeholder and is often unset on the Node process
+  // even when the Console shows it on the service / frontend bundle.
+  return envFlagTrue('ENABLE_ENTRY_WRITES', 'ENABLE_ENTRY_WRITE');
 }
 
 /**
@@ -257,9 +300,20 @@ const STEWARD_WRITE_IAM_PERMISSIONS = [
   'dataplex.entries.update',
 ];
 
-/** UI + API steward edit: both Cloud Run / env flags must be true. */
+/** UI follows the same kill-switch as UpdateEntry. */
 function isStewardEditUiEnabled() {
-  return envFlagTrue('ENABLE_ENTRY_WRITES') && envFlagTrue('VITE_FEATURE_STEWARD_EDIT');
+  return areEntryWritesEnabled();
+}
+
+function stewardEditDiagnostics() {
+  const writes = describeEnvFlag('ENABLE_ENTRY_WRITES', 'ENABLE_ENTRY_WRITE');
+  const vite = describeEnvFlag('VITE_FEATURE_STEWARD_EDIT', 'FEATURE_STEWARD_EDIT');
+  return {
+    writesEnabled: areEntryWritesEnabled(),
+    canEdit: areEntryWritesEnabled(),
+    ENABLE_ENTRY_WRITES: writes,
+    VITE_FEATURE_STEWARD_EDIT: vite,
+  };
 }
 
 
@@ -676,23 +730,25 @@ app.get('/api/v1/check-entry-access', async (req, res) => {
 app.post('/api/v1/check-entry-write-access', async (req, res) => {
   const writesEnabled = areEntryWritesEnabled();
   const stewardEditUiEnabled = isStewardEditUiEnabled();
+  const diag = stewardEditDiagnostics();
   console.log(
-    `[check-entry-write-access] ENABLE_ENTRY_WRITES=${JSON.stringify(process.env.ENABLE_ENTRY_WRITES)} ` +
-    `VITE_FEATURE_STEWARD_EDIT=${JSON.stringify(process.env.VITE_FEATURE_STEWARD_EDIT)} ` +
-    `writesEnabled=${writesEnabled} stewardEditUiEnabled=${stewardEditUiEnabled}`
+    `[check-entry-write-access] canEdit=${writesEnabled} writesEnabled=${writesEnabled} ` +
+    `stewardEditUiEnabled=${stewardEditUiEnabled} ` +
+    `ENABLE_ENTRY_WRITES=${diag.ENABLE_ENTRY_WRITES.json} ` +
+    `VITE_FEATURE_STEWARD_EDIT=${diag.VITE_FEATURE_STEWARD_EDIT.json} ` +
+    `parsedWrites=${diag.ENABLE_ENTRY_WRITES.parsed} parsedVite=${diag.VITE_FEATURE_STEWARD_EDIT.parsed}`
   );
 
-  if (!writesEnabled || !stewardEditUiEnabled) {
+  if (!writesEnabled) {
     return res.json({
-      // canEdit drives the Edit button. Require both env flags.
       canEdit: false,
-      stewardEditUiEnabled,
+      stewardEditUiEnabled: false,
       permissions: STEWARD_WRITE_IAM_PERMISSIONS,
       grantedPermissions: [],
-      writesEnabled,
-      message: !writesEnabled
-        ? `Entry writes are disabled (ENABLE_ENTRY_WRITES=${JSON.stringify(process.env.ENABLE_ENTRY_WRITES)}).`
-        : `Steward edit UI is disabled (VITE_FEATURE_STEWARD_EDIT=${JSON.stringify(process.env.VITE_FEATURE_STEWARD_EDIT)}). Set both flags on Cloud Run.`,
+      writesEnabled: false,
+      message:
+        `Entry writes are disabled (ENABLE_ENTRY_WRITES=${diag.ENABLE_ENTRY_WRITES.json}). ` +
+        'Set ENABLE_ENTRY_WRITES=true on the Cloud Run service (no extra quotes) and deploy a new revision.',
     });
   }
 
@@ -2656,6 +2712,12 @@ app.get('/api/access-request/health', (req, res) => {
 app.get('/api/health', (req, res) => {
     res.status(200).send('API is running!');
 });
+
+app.get('/api/steward-edit-status', (req, res) => {
+  const diag = stewardEditDiagnostics();
+  console.log(`[steward-edit-status] canEdit=${diag.canEdit} ${JSON.stringify(diag)}`);
+  res.status(200).json(diag);
+});
 // Basic health check endpoint
 app.get('/', (req, res) => {
     res.redirect('/home'); // Redirects to the /home route
@@ -2668,11 +2730,17 @@ app.get('/*\w', (req, res) => {
 
 // Start the server
 app.listen(PORT, () => {
+    const diag = stewardEditDiagnostics();
     console.log(`Server listening on port ${PORT}`);
+    console.log(
+      `[steward-edit] canEdit=${diag.canEdit} ENABLE_ENTRY_WRITES=${diag.ENABLE_ENTRY_WRITES.json} ` +
+      `parsed=${diag.ENABLE_ENTRY_WRITES.parsed} key=${diag.ENABLE_ENTRY_WRITES.key}`
+    );
     console.log('API Endpoints:');
     console.log(`  POST /api/v1/check-permissions`);
     console.log(`  POST /api/v1/search`);
     console.log(`  GET /api/health`);
+    console.log(`  GET /api/steward-edit-status`);
     console.log(`process.env.GOOGLE_CLOUD_PROJECT_ID: ${process.env.GOOGLE_CLOUD_PROJECT_ID || 'Not set'}`);
 });
 

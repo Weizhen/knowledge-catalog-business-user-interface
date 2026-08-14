@@ -10,4 +10,4 @@ export const APP_PRODUCT_NAME_LINE2 = 'Management Platform';
  * Build version for support / Cloud Run debugging.
  * Keep in sync with root package.json "version".
  */
-export const APP_VERSION = '1.4.2';
+export const APP_VERSION = '1.4.3';

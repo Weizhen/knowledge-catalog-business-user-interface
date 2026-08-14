@@ -86,7 +86,7 @@ function matchesPublicPath(reqPath, publicPaths) {
  */
 function createGoogleAuthMiddleware(options = {}) {
   const {
-    publicPaths = ['/api/health', '/api/access-request/health'],
+    publicPaths = ['/api/health', '/api/access-request/health', '/api/steward-edit-status'],
     audience =
       process.env.GOOGLE_OAUTH_CLIENT_ID ||
       process.env.GOOGLE_OAUTH_AUDIENCE ||
