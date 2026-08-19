@@ -32,10 +32,36 @@ export const SYSTEM_ASPECT_TYPE_IDS = new Set([
   'bigquery-table',
   'bigquery-dataset',
   'bigquery-view',
+  'generic-entry',
+  'generic',
 ]);
 
-export function isSystemAspectKey(aspectKey: string): boolean {
+const GOOGLE_ASPECT_TYPE_PROJECT = 'dataplex-types';
+
+function aspectTypeResource(aspect?: { aspectType?: string } | null): string {
+  return String(aspect?.aspectType || '').toLowerCase();
+}
+
+function isGoogleProvidedAspect(aspectKey: string, aspect?: { aspectType?: string } | null): boolean {
+  const lower = (aspectKey || '').toLowerCase();
+  if (lower.startsWith(`${GOOGLE_ASPECT_TYPE_PROJECT}.`) || lower.includes(`.${GOOGLE_ASPECT_TYPE_PROJECT}.`)) {
+    return true;
+  }
+  const typeName = aspectTypeResource(aspect);
+  return typeName.includes(`/${GOOGLE_ASPECT_TYPE_PROJECT}/`) || typeName.startsWith(`${GOOGLE_ASPECT_TYPE_PROJECT}/`);
+}
+
+/**
+ * True for Dataplex system-managed / Google-provided aspects.
+ * Those cannot be modified via UpdateEntry (API: "system managed aspect cannot be modified").
+ * Customer-defined aspect types (project.location.typeId) remain editable.
+ */
+export function isSystemAspectKey(
+  aspectKey: string,
+  aspect?: { aspectType?: string } | null
+): boolean {
   if (!aspectKey) return true;
+  if (isGoogleProvidedAspect(aspectKey, aspect)) return true;
   const lower = aspectKey.toLowerCase();
   if (SYSTEM_ASPECT_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
     return true;

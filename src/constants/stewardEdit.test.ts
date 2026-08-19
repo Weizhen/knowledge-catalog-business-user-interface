@@ -11,7 +11,15 @@ describe('stewardEdit helpers', () => {
   it('detects system aspect keys', () => {
     expect(isSystemAspectKey('dataplex-types.global.schema')).toBe(true);
     expect(isSystemAspectKey('123.global.overview')).toBe(true);
+    expect(isSystemAspectKey('dataplex-types.global.generic-entry')).toBe(true);
+    expect(isSystemAspectKey('dataplex-types.global.bigquery-table')).toBe(true);
+    expect(
+      isSystemAspectKey('my-project.global.generic-entry', {
+        aspectType: 'projects/dataplex-types/locations/global/aspectTypes/generic-entry',
+      })
+    ).toBe(true);
     expect(isSystemAspectKey('my-project.global.custom-governance')).toBe(false);
+    expect(isSystemAspectKey('123.custom.annotation1')).toBe(false);
   });
 
   it('detects overview aspect keys', () => {

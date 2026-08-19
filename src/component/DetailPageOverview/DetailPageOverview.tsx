@@ -351,7 +351,16 @@ const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(ent
   const schemaData = entry?.aspects?.[`${number}.global.schema`]?.data?.fields?.fields?.listValue?.values || [];
   let contacts = entry?.aspects?.[`${number}.global.contacts`]?.data?.fields?.identities?.listValue?.values || [];
   let usage = entry?.aspects?.[`${number}.global.usage`]?.data?.fields || {};
-  let documentation = entry?.aspects?.[`${number}.global.overview`]?.data?.fields?.content?.stringValue || 'No Documentation Available';
+  const overviewAspectKey =
+    Object.keys(entry?.aspects || {}).find((k) => isOverviewAspectKey(k)) ||
+    `${number}.global.overview`;
+  const overviewPlain = entry?.aspects?.[overviewAspectKey]
+    ? getPlainAspectData(entry.aspects[overviewAspectKey])
+    : {};
+  let documentation =
+    (typeof overviewPlain.content === 'string' && overviewPlain.content) ||
+    entry?.aspects?.[overviewAspectKey]?.data?.fields?.content?.stringValue ||
+    'No Documentation Available';
 
   // Always compute memoized helpers at top-level (avoid conditional hooks)
   const firstRow = React.useMemo(() => {

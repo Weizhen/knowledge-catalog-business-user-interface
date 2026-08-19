@@ -165,7 +165,7 @@ const AspectEditDialog: React.FC<AspectEditDialogProps> = ({
     () =>
       aspectTypeOptions.filter((opt) => {
         const key = aspectKeyFromAspectTypeName(opt.name);
-        return !isSystemAspectKey(key);
+        return !isSystemAspectKey(key, { aspectType: opt.name });
       }),
     [aspectTypeOptions]
   );
@@ -192,8 +192,8 @@ const AspectEditDialog: React.FC<AspectEditDialogProps> = ({
       setError('Aspect type is required');
       return;
     }
-    if (isSystemAspectKey(resolvedAspectKey)) {
-      setError('System aspects cannot be edited here');
+    if (isSystemAspectKey(resolvedAspectKey, existingAspect)) {
+      setError('System-managed aspects cannot be edited. Use a customer-defined aspect type.');
       return;
     }
 

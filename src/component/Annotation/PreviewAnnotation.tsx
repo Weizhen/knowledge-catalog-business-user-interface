@@ -12,6 +12,7 @@ import {
   DialogContentText,
   DialogActions,
   Box,
+  Tooltip,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -495,9 +496,9 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
           const isFirstAspect = key === displayableKeys[0];
           const isLastAspect = key === displayableKeys[displayableKeys.length - 1];
           const isSingleItem = displayableKeys.length === 1;
-          const editableAspect = canEdit && !isSystemAspectKey(key);
+          const editableAspect = canEdit && !isSystemAspectKey(key, aspects[key]);
 
-          const rawData = aspects[key].data;
+          const rawData = aspects[key]?.data;
 
           let hasContent = false;
           const hasFields = rawData && rawData.fields && Object.keys(rawData.fields).length > 0;
@@ -510,12 +511,16 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
             hasContent = validFieldKeys.length > 0;
           }
 
-          const rawAspectName = aspects[key].aspectType.split('/').pop();
+          const rawAspectName =
+            aspects[key]?.aspectType?.split('/')?.pop() ||
+            key.split('.').pop()?.split('@')[0] ||
+            key;
           const aspectName = ASPECT_DISPLAY_NAMES[rawAspectName] ?? rawAspectName.replace(/[-_]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
           const aspectIcon = getAspectL1Icon(rawAspectName);
 
-          const stewardActions = editableAspect ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 1 }}>
+          const stewardActions = canEdit ? (
+            editableAspect ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 1 }} onClick={(e) => e.stopPropagation()}>
               <IconButton
                 size="small"
                 aria-label={`Edit ${aspectName}`}
@@ -533,6 +538,22 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                 <DeleteOutlineIcon fontSize="small" />
               </IconButton>
             </Box>
+            ) : (
+              <Tooltip title="System-managed aspect (read only)">
+                <Typography
+                  component="span"
+                  sx={{
+                    fontSize: '11px',
+                    color: '#80868B',
+                    fontFamily: '"Google Sans", sans-serif',
+                    whiteSpace: 'nowrap',
+                    pr: 1,
+                  }}
+                >
+                  Read only
+                </Typography>
+              </Tooltip>
+            )
           ) : null;
 
           const headerContent = (

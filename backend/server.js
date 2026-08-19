@@ -890,6 +890,23 @@ app.post('/api/v1/update-entry', async (req, res) => {
     });
   }
 
+  const systemAspectKeys = (aspectKeys || []).filter((key) => {
+    const lower = String(key || '').toLowerCase();
+    if (lower.endsWith('.global.overview')) return false;
+    const aspectType = String(aspects?.[key]?.aspectType || '').toLowerCase();
+    return (
+      lower.startsWith('dataplex-types.') ||
+      lower.includes('.dataplex-types.') ||
+      aspectType.includes('/dataplex-types/')
+    );
+  });
+  if (systemAspectKeys.length > 0) {
+    return res.status(400).json({
+      error: 'System-managed aspects cannot be modified via API.',
+      details: `Read-only aspect keys: ${systemAspectKeys.join(', ')}. Edit customer-defined aspects only.`,
+    });
+  }
+
   const parsed = parseEntryName(entryName);
   if (!parsed) {
     return res.status(400).json({

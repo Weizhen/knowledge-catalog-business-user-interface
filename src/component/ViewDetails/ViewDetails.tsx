@@ -423,7 +423,11 @@ let annotationTab = (
     marginTop: '12px' 
   }}>
     <PreviewAnnotation
-      entry={filteredEntry || displayEntry}
+      entry={
+        filteredEntry?.name === displayEntry?.name
+          ? (filteredEntry || displayEntry)
+          : displayEntry
+      }
       css={{
         width: "100%",
         border: "none",

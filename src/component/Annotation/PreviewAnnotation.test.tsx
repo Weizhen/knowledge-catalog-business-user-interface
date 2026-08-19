@@ -751,6 +751,30 @@ describe('PreviewAnnotation', () => {
       expect(screen.getByLabelText(/Remove Annotation1/i)).toBeInTheDocument();
     });
 
+    it('does not show edit on Google system-managed aspects', () => {
+      renderPreviewAnnotation({
+        canEdit: true,
+        onUpdateEntry: vi.fn(),
+        idToken: 'token',
+        entry: {
+          entryType: 'tables/123',
+          aspects: {
+            'dataplex-types.global.generic-entry': {
+              aspectType: 'projects/dataplex-types/locations/global/aspectTypes/generic-entry',
+              data: {
+                fields: {
+                  name: { kind: 'stringValue', stringValue: 'sys' },
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(screen.getByText('Add aspect')).toBeInTheDocument();
+      expect(screen.queryByLabelText(/Edit Generic Entry/i)).not.toBeInTheDocument();
+      expect(screen.getByText('Read only')).toBeInTheDocument();
+    });
+
     it('opens aspect edit dialog when Add aspect is clicked', () => {
       renderPreviewAnnotation({
         canEdit: true,
